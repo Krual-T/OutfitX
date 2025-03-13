@@ -1,0 +1,20 @@
+name: GraduationDesign
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12.4
+  - pip
+  - pip:
+    - torch==2.5.0
+    - torchvision==0.20.0
+    - torchaudio==2.5.0
+    - pillow==11.0.0
+    - transformers==4.48.3
+    - scikit-learn
+    - faiss-cpu
+    - wandb
+    - tqdm
+    - gradio
+    - opencv-python
+    - gdown
