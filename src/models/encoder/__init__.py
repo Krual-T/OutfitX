@@ -1,0 +1,2 @@
+from image_encoder import CLIPImageEncoder, Resnet18ImageEncoder
+from text_encoder import CLIPTextEncoder, HuggingFaceTextEncoder

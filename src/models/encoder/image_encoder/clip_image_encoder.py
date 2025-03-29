@@ -1,0 +1,75 @@
+import torch
+import numpy as np
+
+from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
+from typing import List, Dict, Any
+
+from src.models.utils.model_utils import freeze_model
+from base_image_encoder import BaseImageEncoder
+
+class CLIPImageEncoder(BaseImageEncoder):
+
+    def __init__(
+            self,
+            model_name_or_path: str = 'patrickjohncyh/fashion-clip',
+            freeze: bool = True
+    ):
+        # 初始化父类
+        super().__init__()
+        # 加载CLIPVisionModelWithProjection模型
+        self.model = CLIPVisionModelWithProjection.from_pretrained(
+            model_name_or_path, weights_only=False
+        )
+        # 设置模型为评估模式
+        self.model.eval()
+        # 冻结模型
+        if freeze:
+            freeze_model(self.model)
+        # 加载CLIPImageProcessor
+        self.processor = CLIPImageProcessor.from_pretrained(
+            model_name_or_path, do_convert_rgb=False
+        )
+
+    # 获取图像大小
+    @property
+    def image_size(self) -> int:
+        return self.processor.size['shortest_edge']
+
+    # 获取嵌入维度
+    @property
+    def d_embed(self) -> int:
+        return self.model.config.projection_dim
+
+    # 前向传播
+    @torch.no_grad()
+    def _forward(
+            self,
+            images: List[List[np.ndarray]],
+            processor_kargs: Dict[str, Any] = None
+    ):
+        # 获取batch大小
+        batch_size = len(images)
+        # 将图像列表展平
+        images = sum(images, [])
+
+        # 设置processor参数
+        processor_kargs = processor_kargs if processor_kargs is not None else {}
+        processor_kargs['return_tensors'] = 'pt'
+
+        # 对图像进行预处理
+        transformed_images = self.processor(
+            images=images, **processor_kargs
+        ).to(self.device)
+
+        # 获取图像嵌入
+        image_embeddings = self.model(
+            **transformed_images
+        ).image_embeds
+
+        # 将图像嵌入调整为(batch_size, -1, d_embed)的形状
+        image_embeddings = image_embeddings.view(
+            batch_size, -1, self.d_embed
+        )
+
+        # 返回图像嵌入
+        return image_embeddings
