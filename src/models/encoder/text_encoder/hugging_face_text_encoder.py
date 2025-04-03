@@ -11,7 +11,7 @@ from src.models.utils.model_utils import freeze_model, mean_pooling
 
 
 class HuggingFaceTextEncoder(BaseTextEncoder):
-
+    # default model：SentenceBERT——paper's implement
     def __init__(
             self,
             d_embed: int = 64,
