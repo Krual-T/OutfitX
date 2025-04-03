@@ -30,12 +30,12 @@ class CLIPImageEncoder(BaseImageEncoder):
             model_name_or_path, do_convert_rgb=False
         )
 
-    # 获取图像大小
+    # 获取图像大小 224
     @property
     def image_size(self) -> int:
         return self.processor.size['shortest_edge']
 
-    # 获取嵌入维度
+    # 获取嵌入维度 512
     @property
     def d_embed(self) -> int:
         return self.model.config.projection_dim
@@ -53,6 +53,7 @@ class CLIPImageEncoder(BaseImageEncoder):
         images = sum(images, [])
 
         # 设置processor参数
+        # 确保返回类型是torch.tensor
         processor_kargs = processor_kargs if processor_kargs is not None else {}
         processor_kargs['return_tensors'] = 'pt'
 
@@ -66,7 +67,7 @@ class CLIPImageEncoder(BaseImageEncoder):
             **transformed_images
         ).image_embeds
 
-        # 将图像嵌入调整为(batch_size, -1, d_embed)的形状
+        # 将图像嵌入调整为(batch_size, auto, d_embed)的形状
         image_embeddings = image_embeddings.view(
             batch_size, -1, self.d_embed
         )

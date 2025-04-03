@@ -1,2 +1,1 @@
-from image_encoder import CLIPImageEncoder, Resnet18ImageEncoder
-from text_encoder import CLIPTextEncoder, HuggingFaceTextEncoder
+from item_encoder import ItemEncoder

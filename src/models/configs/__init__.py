@@ -1,0 +1,2 @@
+from outfit_transformer_config import OutfitTransformerConfig
+from outfit_clip_transformer_config import OutfitCLIPTransformerConfig

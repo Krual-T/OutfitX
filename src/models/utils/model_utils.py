@@ -1,7 +1,7 @@
 
 import torch
 from torch import Tensor
-
+from typing import Optional
 def freeze_model(model):
     for param in model.parameters():
         param.requires_grad = False
@@ -18,3 +18,25 @@ def mean_pooling(
     mask_sum = torch.clamp(input_mask_expanded.sum(dim=1), min=1e-9)
 
     return summed_embeddings / mask_sum
+
+# 聚合文本和图像的嵌入
+def aggregate_embeddings(
+    image_embeddings: Optional[Tensor] = None,
+    text_embeddings: Optional[Tensor] = None,
+    aggregation_method: str = 'concat'
+) -> Tensor:
+    embeds = []
+    if image_embeddings is not None:
+        embeds.append(image_embeddings)
+    if text_embeddings is not None:
+        embeds.append(text_embeddings)
+
+    if not embeds:
+        raise ValueError('At least one of image_embeds or text_embeds must be provided.')
+
+    if aggregation_method == 'concat':
+        return torch.cat(embeds, dim=-1)
+    elif aggregation_method == 'mean':
+        return torch.mean(torch.stack(embeds), dim=-2)
+    else:
+        raise ValueError(f"Unsupported aggregation method: {aggregation_method}. Use 'concat' or 'mean'.")
