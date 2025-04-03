@@ -1,6 +1,6 @@
 from torch import nn
 from configs import OutfitTransformerConfig
-
+from encoder import ItemEncoder
 class OutfitTransformer(nn.Module):
     def __init__(self, cfg: OutfitTransformerConfig= None):
         super().__init__()
