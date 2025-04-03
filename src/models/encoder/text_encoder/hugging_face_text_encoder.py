@@ -23,6 +23,7 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
         if freeze:
             freeze_model(self.model)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        # projection
         self.proj = nn.Linear(
             in_features=self.model.config.hidden_size,
             out_features=d_embed

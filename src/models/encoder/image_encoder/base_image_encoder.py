@@ -64,7 +64,7 @@ class BaseImageEncoder(nn.Module, ABC):
         """
         return len(set(len(image_seq) for image_seq in images)) == 1
 
-    def _property_not_implemented(self):
+    def __property_not_implemented(self):
         """
         自动获取属性名并抛出 NotImplementedError
         :return:

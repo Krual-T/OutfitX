@@ -22,10 +22,12 @@ class CLIPTextEncoder(BaseTextEncoder):
         self.model.eval()
         if freeze:
             freeze_model(self.model)
+
         self.tokenizer = CLIPTokenizer.from_pretrained(
             model_name_or_path
         )
 
+    # 输出维度512
     @property
     def d_embed(self) -> int:
         return self.model.config.projection_dim
