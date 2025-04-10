@@ -1,1 +1,2 @@
 from fashion_item import FashionItem
+from fashion_compatibility_query import FashionCompatibilityQuery
