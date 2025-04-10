@@ -1,0 +1,1 @@
+from fashion_item import FashionItem
