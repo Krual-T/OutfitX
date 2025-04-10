@@ -1,6 +1,6 @@
 from item_encoder import ItemEncoder
-from image_encoder import CLIPImageEncoder
-from text_encoder import CLIPTextEncoder
+from image_encoders import CLIPImageEncoder
+from text_encoders import CLIPTextEncoder
 class CLIPItemEncoder(ItemEncoder):
     def __init__(
             self,
