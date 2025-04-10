@@ -5,7 +5,7 @@ from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
 from typing import List, Dict, Any
 
 from src.models.utils.model_utils import freeze_model
-from base_image_encoder import BaseImageEncoder
+from src.models.encoders.base_encoders import BaseImageEncoder
 
 class CLIPImageEncoder(BaseImageEncoder):
 

@@ -6,7 +6,7 @@ from typing import List
 from torchvision.models import resnet18, ResNet18_Weights
 from torchvision import transforms
 
-from base_image_encoder import BaseImageEncoder
+from src.models.encoders.base_encoders import BaseImageEncoder
 from src.models.utils.model_utils import freeze_model
 
 class Resnet18ImageEncoder(BaseImageEncoder):

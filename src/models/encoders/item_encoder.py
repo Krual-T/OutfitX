@@ -1,6 +1,6 @@
 from torch import nn
-from image_encoder import Resnet18ImageEncoder
-from text_encoder import HuggingFaceTextEncoder
+from image_encoders import Resnet18ImageEncoder
+from text_encoders import HuggingFaceTextEncoder
 from src.models.utils.model_utils import aggregate_embeddings
 
 class ItemEncoder(nn.Module):
