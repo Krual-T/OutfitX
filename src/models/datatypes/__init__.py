@@ -1,3 +1,3 @@
 from fashion_item import FashionItem
-from fashion_compatibility_query import FashionCompatibilityQuery
-from fashion_complementary_query import FashionComplementaryQuery
+from outfit_compatibility_query import OutfitCompatibilityQuery
+from outfit_complementary_query import OutfitComplementaryQuery
