@@ -8,7 +8,7 @@ class OutfitComplementaryItemRetrievalTask(BaseModel):
         default_factory=list,
         description="List of fashion items"
     )
-    description: str = Field(
-        default="",
-        description="Category or description of the target outfit"
+    target_item: FashionItem = Field(
+        default_factory=FashionItem(),
+        description="With embedding of description (no image) of target item."
     )
