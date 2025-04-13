@@ -4,7 +4,7 @@ import numpy as np
 from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
 from typing import List, Dict, Any
 
-from src.models.utils.model_utils import freeze_model
+from src.models.utils.model_utils import freeze_model, flatten_seq_to_one_dim
 from src.models.encoders.base_encoders import BaseImageEncoder
 
 class CLIPImageEncoder(BaseImageEncoder):
@@ -44,14 +44,9 @@ class CLIPImageEncoder(BaseImageEncoder):
     @torch.no_grad()
     def _forward(
             self,
-            images: List[List[np.ndarray]],
+            images: List[np.ndarray],
             processor_kargs: Dict[str, Any] = None
     ):
-        # 获取batch大小
-        batch_size = len(images)
-        # 将图像列表展平
-        images = sum(images, [])
-
         # 设置processor参数
         # 确保返回类型是torch.tensor
         processor_kargs = processor_kargs if processor_kargs is not None else {}
@@ -66,11 +61,6 @@ class CLIPImageEncoder(BaseImageEncoder):
         image_embeddings = self.model(
             **transformed_images
         ).image_embeds
-
-        # 将图像嵌入调整为(batch_size, auto, d_embed)的形状
-        image_embeddings = image_embeddings.view(
-            batch_size, -1, self.d_embed
-        )
 
         # 返回图像嵌入
         return image_embeddings

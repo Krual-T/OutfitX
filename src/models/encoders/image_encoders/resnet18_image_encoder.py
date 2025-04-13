@@ -7,7 +7,8 @@ from torchvision.models import resnet18, ResNet18_Weights
 from torchvision import transforms
 
 from src.models.encoders.base_encoders import BaseImageEncoder
-from src.models.utils.model_utils import freeze_model
+from src.models.utils.model_utils import freeze_model, flatten_seq_to_one_dim
+
 
 class Resnet18ImageEncoder(BaseImageEncoder):
 
@@ -74,19 +75,14 @@ class Resnet18ImageEncoder(BaseImageEncoder):
 
     def _forward(
             self,
-            images: List[List[np.ndarray]]
+            images: List[np.ndarray]
     ):
-        batch_size = len(images)
-        images = sum(images, [])
-
         transformed_images = torch.stack(
             [self.transform(image) for image in images]
         ).to(self.device)
+
         image_embeddings = self.model(
             transformed_images
-        )
-        image_embeddings = image_embeddings.view(
-            batch_size, -1, self.d_embed
         )
 
         return image_embeddings
