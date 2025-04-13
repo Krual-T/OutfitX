@@ -3,12 +3,12 @@ from pydantic import BaseModel, Field
 from fashion_item import FashionItem
 
 
-class OutfitComplementaryQuery(BaseModel):
-    outfit: List[Union[FashionItem, int]] = Field(
+class OutfitComplementaryItemRetrievalTask(BaseModel):
+    outfit: List[FashionItem] = Field(
         default_factory=list,
         description="List of fashion items"
     )
-    category: str = Field(
+    description: str = Field(
         default="",
         description="Category of the target outfit"
     )
