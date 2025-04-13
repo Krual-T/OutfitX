@@ -10,5 +10,5 @@ class OutfitComplementaryItemRetrievalTask(BaseModel):
     )
     description: str = Field(
         default="",
-        description="Category of the target outfit"
+        description="Category or description of the target outfit"
     )
