@@ -7,7 +7,7 @@ from typing import List
 from typing import Dict, Any
 
 from src.models.encoders.base_encoders import BaseTextEncoder
-from src.models.utils.model_utils import freeze_model, mean_pooling
+from src.models.utils.model_utils import freeze_model, mean_pooling, flatten_seq_to_one_dim
 
 
 class HuggingFaceTextEncoder(BaseTextEncoder):
@@ -36,11 +36,10 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
     @torch.no_grad()
     def _forward(
             self,
-            texts: List[List[str]],
+            texts: List[str],
             tokenizer_kargs: Dict[str, Any] = None
     ) -> Tensor:
-        batch_size = len(texts)
-        texts = sum(texts, [])
+
 
         tokenizer_kargs = tokenizer_kargs if tokenizer_kargs is not None else {
             'max_length': 32,
@@ -63,8 +62,6 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
         text_embeddings = self.proj(
             outputs
         )
-        text_embeddings = text_embeddings.view(
-            batch_size, -1, self.d_embed
-        )
+
 
         return text_embeddings

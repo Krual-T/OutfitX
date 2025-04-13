@@ -4,6 +4,9 @@ import torch.nn.functional as F
 from abc import ABC, abstractmethod
 from typing import List
 
+from src.models.utils.model_utils import flatten_seq_to_one_dim
+
+
 class BaseTextEncoder(nn.Module, ABC):
     def __init__(self):
         super().__init__()
@@ -17,7 +20,14 @@ class BaseTextEncoder(nn.Module, ABC):
         if self.__is_sequence_elements_length_consistent(texts):
             raise ValueError('All sequences in texts should have the same length.')
 
+        batch_size = len(texts)
+        texts = flatten_seq_to_one_dim(texts)
+
         text_embeddings = self._forward(texts, *args, **kwargs)
+
+        text_embeddings = text_embeddings.view(
+            batch_size, -1, self.d_embed
+        )
 
         if normalize:
             text_embeddings = F.normalize(text_embeddings, p=2, dim=-1)
@@ -27,7 +37,7 @@ class BaseTextEncoder(nn.Module, ABC):
     @abstractmethod
     def _forward(
             self,
-            texts: List[List[str]]
+            texts: List[str]
     ) -> torch.Tensor:
         raise NotImplementedError(f"内部方法 '_forward' 必须在子类中实现")
 
