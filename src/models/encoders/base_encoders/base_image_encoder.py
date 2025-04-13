@@ -4,8 +4,11 @@ import torch.nn.functional as F
 import numpy as np
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Union
 
+from PIL import Image
+
+from src.models.utils.model_utils import flatten_seq_to_one_dim
 
 
 class BaseImageEncoder(nn.Module, ABC):
@@ -15,14 +18,27 @@ class BaseImageEncoder(nn.Module, ABC):
 
     def forward(
             self,
-            images: List[List[np.ndarray]],
+            images: List[Union[List[np.ndarray],List[Image.Image]]],
             normalize: bool = True,
             *args, **kwargs
     ) -> torch.Tensor:
         if not self._is_sequence_elements_length_consistent(images):
             raise ValueError('All sequences in images should have the same length.')
 
+        # 获取batch大小
+        batch_size = len(images)
+        # 将图像列表展平
+        images = flatten_seq_to_one_dim(images)
+
+        if len(images)>0 and type(images[0]) == Image.Image:
+            images = [np.array(image) for image in images]
+
         image_embeddings = self._forward(images, *args, **kwargs)
+
+        # 将图像嵌入调整为(batch_size, auto, d_embed)的形状
+        image_embeddings = image_embeddings.view(
+            batch_size, -1, self.d_embed
+        )
 
         if normalize:
             image_embeddings = F.normalize(image_embeddings, p=2, dim=-1)
@@ -64,14 +80,4 @@ class BaseImageEncoder(nn.Module, ABC):
         """
         return len(set(len(image_seq) for image_seq in images)) == 1
 
-    def __property_not_implemented(self):
-        """
-        自动获取属性名并抛出 NotImplementedError
-        :return:
-        """
-        import inspect
-        # 获取调用该方法的属性名
-        frame = inspect.currentframe().f_back
-        prop_name = frame.f_code.co_name
-        raise NotImplementedError(f"属性 '{prop_name}' 必须在子类中实现")
 
