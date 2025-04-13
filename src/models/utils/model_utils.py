@@ -1,7 +1,10 @@
+import itertools
 
 import torch
 from torch import Tensor
-from typing import Optional
+from typing import Optional, List, Any
+
+
 def freeze_model(model):
     for param in model.parameters():
         param.requires_grad = False
@@ -40,3 +43,6 @@ def aggregate_embeddings(
         return torch.mean(torch.stack(embeds), dim=-2)
     else:
         raise ValueError(f"Unsupported aggregation method: {aggregation_method}. Use 'concat' or 'mean'.")
+
+def flatten_seq_with_two_dims(seq:List[List[Any]])->List[Any]:
+    return list(itertools.chain(*seq))
