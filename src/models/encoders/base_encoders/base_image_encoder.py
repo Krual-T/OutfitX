@@ -48,7 +48,7 @@ class BaseImageEncoder(nn.Module, ABC):
     @abstractmethod
     def _forward(
             self,
-            images: List[List[np.ndarray]]
+            images: List[np.ndarray]
     ) -> torch.Tensor:
         raise NotImplementedError('这个_forward（image_embed）方法必须由子类来实现')
 
