@@ -1,7 +1,9 @@
+import numpy as np
 import torch
 import torch.nn.functional as F
 
 from PIL import Image
+from sympy import sequence
 from torch import nn
 from configs import OutfitTransformerConfig
 from encoders import ItemEncoder
@@ -96,8 +98,23 @@ class OutfitTransformer(nn.Module):
                     cp_queries: List[OutfitCompatibilityPredictionTask],
                     use_precomputed_embedding: bool = False
                     )->torch.Tensor:
-
-        return
+        embeddings,mask = self._get_embeddings_and_padding_masks(cp_queries, use_precomputed_embedding)
+        transformer_inputs = torch.cat([
+                self.outfit_token.view(1, 1, -1).expand(len(cp_queries), -1, -1), # (B,1,d_embed)
+                embeddings # (B,L,d_embed)
+             ],dim=1) # (B,L+1,d_embed)
+        mask = torch.cat([
+            torch.zeros(len(cp_queries), 1, dtype=torch.bool, device=self.device), # [B, 1]
+            mask # [B, L]
+        ], dim=1) # [B, L+1]
+        transformer_outputs = self.transformer_encoder(
+            src=transformer_inputs,
+            src_key_padding_mask=mask
+        )
+        # 取出outfit_token的输出
+        outfit_token_states = transformer_outputs[:, 0, :] # [B, d_embed]
+        scores = self.cp_ffn(outfit_token_states)
+        return scores
 
     def _cir_forward(self,
                      cir_queries: List[OutfitComplementaryItemRetrievalTask],
@@ -112,3 +129,82 @@ class OutfitTransformer(nn.Module):
     )->torch.Tensor:
 
         return
+
+    def _get_embeddings_and_padding_masks(self,
+        queries:List[Union[
+            OutfitCompatibilityPredictionTask,
+            OutfitComplementaryItemRetrievalTask
+        ]],
+        use_precomputed_embedding: bool = False,
+    ):
+        max_length = self._get_max_length(queries)
+        # batch_size = len(queries)
+
+        outfits = self._get_outfits(queries)
+        if use_precomputed_embedding:
+            embeddings = self._pad_sequences(
+                sequences=[[item.embedding for item in outfit] for outfit in outfits],
+                max_length=max_length,
+                pad_value=self.pad_emb,
+                return_tensor=True
+            )
+        else:
+            # 对outfit进行填充
+            images = self._pad_sequences(
+                sequences=[[item.image for item in outfit] for outfit in outfits],
+                max_length=max_length,
+                pad_value=self.image_pad
+            )
+            texts = self._pad_sequences(
+                sequences=[[f"{item.description}" for item in outfit] for outfit in outfits],
+                max_length=max_length,
+                pad_value=self.text_pad
+            )
+            # item_encoder需要接收的是长度一样的outfit序列,所以需要对outfit进行填充
+            embeddings = self.item_encoder(images, texts)
+        mask = [
+            [0] * min(len(outfit), max_length) + [1] * (max_length - min(len(outfit), max_length))
+            for outfit in outfits
+        ]
+        embeddings,mask = embeddings.to(self.device), torch.BoolTensor(mask).to(self.device)
+        return embeddings,mask
+
+
+    def _get_outfits(self,
+        queries:List[Union[
+            OutfitCompatibilityPredictionTask,
+            OutfitComplementaryItemRetrievalTask
+        ]]
+    )->List[List[FashionItem]]:
+        return [query.outfit for query in queries]
+
+    def _get_max_length(self, sequences):
+        """
+        max_length的length指的是每个outfit中的item数量
+        :param sequences:序列
+        :return:每个outfit中的item数量的最大值,即max_length
+        """
+        if self.cfg.padding == 'max_length':
+            return self.cfg.max_length
+        max_length = max(len(seq) for seq in sequences)
+
+        return min(self.cfg.max_length, max_length) if self.cfg.truncation else max_length
+
+    def _pad_sequences(self, sequences, pad_value, max_length,return_tensor=False):
+        # if self.cfg.truncation OR self.cfg.padding == 'max_length'：
+        # len(seq)可能大于max_length，需要对序列进行截断
+        item_length = lambda seq: min(len(seq), max_length)
+        pad_length = lambda seq: max_length - item_length(seq)
+        if return_tensor:
+            return torch.stack([
+                torch.cat([
+                    torch.tensor(np.array(seq)[:item_length(seq)]),
+                    pad_value.expand(pad_length(seq), -1)
+                ],dim=0)
+                for seq in sequences
+            ])
+        else:
+            return [
+                seq[:item_length(seq)] + [pad_value] * (max_length - item_length(seq))
+                for seq in sequences
+            ]
