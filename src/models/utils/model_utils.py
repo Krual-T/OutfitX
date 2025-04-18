@@ -44,5 +44,5 @@ def aggregate_embeddings(
     else:
         raise ValueError(f"Unsupported aggregation method: {aggregation_method}. Use 'concat' or 'mean'.")
 
-def flatten_seq_to_one_dim(seq:List[List[Any]])->List[Any]:
-    return list(itertools.chain(*seq))
+def flatten_seq_to_one_dim(sequences:List[List[Any]])->List[Any]:
+    return list(itertools.chain(*sequences))
