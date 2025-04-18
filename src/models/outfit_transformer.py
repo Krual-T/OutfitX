@@ -80,7 +80,7 @@ class OutfitTransformer(nn.Module):
         self.task_ = {
             OutfitCompatibilityPredictionTask: self._cp_forward,
             OutfitComplementaryItemRetrievalTask: self._cir_forward,
-            FashionItem: self._embed_item_forward
+            FashionItem: self._get_item_embeddings
         }
 
     @property
@@ -138,12 +138,21 @@ class OutfitTransformer(nn.Module):
         target_item_embeddings = self.cir_ffn(target_item_token_states) # [B, d_embed]
         return target_item_embeddings
 
-    def _embed_item_forward(self,
-        items: List[FashionItem],
-        use_precomputed_embedding: bool = False
-    )->torch.Tensor:
-
-        return
+    def _get_item_embeddings(self,
+            items: List[FashionItem],
+            use_precomputed_embedding: bool = False
+        )->torch.Tensor:
+        # (B,1)
+        items = [OutfitComplementaryItemRetrievalTask(outfit=[item]) for item in items]
+        # (B,1,d_embed)
+        embeddings,mask = self._get_embeddings_and_padding_masks(items, use_precomputed_embedding)
+        transformer_outputs = self.transformer_encoder(
+            src=embeddings,
+            src_key_padding_mask=mask
+        )
+        item_token_states = transformer_outputs[:, 0, :] # [B, d_embed]
+        item_embeddings = self.cir_ffn(item_token_states) # [B, d_embed]
+        return item_embeddings
 
     def _get_embeddings_and_padding_masks(self,
         queries:List[Union[
@@ -193,6 +202,7 @@ class OutfitTransformer(nn.Module):
             dtype=torch.bool,
             device=self.device
         )
+        # TODO:确保embedding进行过归一化
         return embeddings,mask
 
 
