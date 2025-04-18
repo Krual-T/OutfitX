@@ -5,6 +5,8 @@ import torch.nn.functional as F
 from PIL import Image
 from sympy import sequence
 from torch import nn
+from torchvision.transforms.v2.functional import pad_mask
+
 from configs import OutfitTransformerConfig
 from encoders import ItemEncoder
 from datatypes import FashionItem,OutfitComplementaryItemRetrievalTask,OutfitCompatibilityPredictionTask
@@ -151,22 +153,33 @@ class OutfitTransformer(nn.Module):
         else:
             # 对outfit进行填充
             images = self._pad_sequences(
-                sequences=[[item.image for item in outfit] for outfit in outfits],
+                sequences=[
+                    [item.image for item in outfit]
+                    for outfit in outfits
+                ],
                 max_length=max_length,
                 pad_value=self.image_pad
             )
             texts = self._pad_sequences(
-                sequences=[[f"{item.description}" for item in outfit] for outfit in outfits],
+                sequences=[
+                    [f"{item.description}"for item in outfit]
+                    for outfit in outfits
+                ],
                 max_length=max_length,
                 pad_value=self.text_pad
             )
             # item_encoder需要接收的是长度一样的outfit序列,所以需要对outfit进行填充
             embeddings = self.item_encoder(images, texts)
-        mask = [
-            [0] * min(len(outfit), max_length) + [1] * (max_length - min(len(outfit), max_length))
-            for outfit in outfits
-        ]
-        embeddings,mask = embeddings.to(self.device), torch.BoolTensor(mask).to(self.device)
+        item_length = lambda seq: min(len(seq), max_length)
+        pad_length = lambda seq: max_length - item_length(seq)
+        mask = torch.tensor(
+            data=[
+                [0] * item_length(outfit) + [1] * (pad_length(outfit))
+                for outfit in outfits
+            ],
+            dtype=torch.bool,
+            device=self.device
+        )
         return embeddings,mask
 
 
@@ -197,14 +210,21 @@ class OutfitTransformer(nn.Module):
         pad_length = lambda seq: max_length - item_length(seq)
         if return_tensor:
             return torch.stack([
-                torch.cat([
-                    torch.tensor(np.array(seq)[:item_length(seq)]),
-                    pad_value.expand(pad_length(seq), -1)
-                ],dim=0)
+                torch.cat(
+                    tensors=[
+                        torch.tensor(
+                            data=np.array(seq)[:item_length(seq)],
+                            dtype=torch.float,
+                            device=self.device
+                        ),
+                        pad_value.expand(pad_length(seq), -1)
+                    ],
+                    dim=0
+                )
                 for seq in sequences
-            ])
+            ]) # 堆叠后的张量默认在子元素所在设备：self.device
         else:
             return [
-                seq[:item_length(seq)] + [pad_value] * (max_length - item_length(seq))
+                seq[:item_length(seq)] + [pad_value] * (pad_length(seq))
                 for seq in sequences
             ]
