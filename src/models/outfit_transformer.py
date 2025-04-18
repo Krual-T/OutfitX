@@ -89,26 +89,26 @@ class OutfitTransformer(nn.Module):
         return next(self.parameters()).device  # 最常用方式
 
     def forward(self,
-                queries: List[Union[OutfitCompatibilityPredictionTask, OutfitComplementaryItemRetrievalTask, FashionItem]],
-                *args, **kwargs
-                ):
+        queries: List[Union[OutfitCompatibilityPredictionTask, OutfitComplementaryItemRetrievalTask, FashionItem]],
+        *args, **kwargs
+    ):
         _type = type(queries[0])
         _forward = self.task_[_type]
         return _forward(queries, *args, **kwargs)
 
     def _cp_forward(self,
-                    cp_queries: List[OutfitCompatibilityPredictionTask],
-                    use_precomputed_embedding: bool = False
-                    )->torch.Tensor:
+        cp_queries: List[OutfitCompatibilityPredictionTask],
+        use_precomputed_embedding: bool = False
+     )->torch.Tensor:
         embeddings,mask = self._get_embeddings_and_padding_masks(cp_queries, use_precomputed_embedding)
         transformer_inputs = torch.cat([
                 self.outfit_token.view(1, 1, -1).expand(len(cp_queries), -1, -1), # (B,1,d_embed)
                 embeddings # (B,L,d_embed)
-             ],dim=1) # (B,L+1,d_embed)
+             ],dim=1) # (B,1+L,d_embed)
         mask = torch.cat([
             torch.zeros(len(cp_queries), 1, dtype=torch.bool, device=self.device), # [B, 1]
             mask # [B, L]
-        ], dim=1) # [B, L+1]
+        ], dim=1) # [B, 1+L]
         transformer_outputs = self.transformer_encoder(
             src=transformer_inputs,
             src_key_padding_mask=mask
@@ -119,11 +119,24 @@ class OutfitTransformer(nn.Module):
         return scores
 
     def _cir_forward(self,
-                     cir_queries: List[OutfitComplementaryItemRetrievalTask],
-                     use_precomputed_embedding: bool = False
-                     )->torch.Tensor:
-
-        return
+        cir_queries: List[OutfitComplementaryItemRetrievalTask],
+        use_precomputed_embedding: bool = False
+    )->torch.Tensor:
+        for query in cir_queries:
+            query.target_item.image = self.image_pad
+            query.outfit=[query.target_item]+query.outfit
+        # [B,1+L,d_embed]
+        embeddings,mask = self._get_embeddings_and_padding_masks(cir_queries, use_precomputed_embedding)
+        image_embedding_index=self.cfg.d_embed//2
+        embeddings[:,0,:image_embedding_index] = self.target_item_image_emb.view(1, -1)
+        transformer_outputs = self.transformer_encoder(
+            src=embeddings,
+            src_key_padding_mask=mask
+        )
+        # 取出target_item_token的输出
+        target_item_token_states = transformer_outputs[:, 0, :] # [B, d_embed]
+        target_item_embeddings = self.cir_ffn(target_item_token_states) # [B, d_embed]
+        return target_item_embeddings
 
     def _embed_item_forward(self,
         items: List[FashionItem],
@@ -186,7 +199,7 @@ class OutfitTransformer(nn.Module):
     def _get_outfits(self,
         queries:List[Union[
             OutfitCompatibilityPredictionTask,
-            OutfitComplementaryItemRetrievalTask
+            OutfitComplementaryItemRetrievalTask,
         ]]
     )->List[List[FashionItem]]:
         return [query.outfit for query in queries]
