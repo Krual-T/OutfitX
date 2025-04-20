@@ -3,7 +3,10 @@ import torch
 import torch.nn.functional as F
 
 from PIL import Image
+from sympy import sequence
 from torch import nn
+from torchvision.transforms.v2.functional import pad_mask
+
 from configs import OutfitTransformerConfig
 from encoders import ItemEncoder
 from datatypes import FashionItem,OutfitComplementaryItemRetrievalTask,OutfitCompatibilityPredictionTask
@@ -90,6 +93,7 @@ class OutfitTransformer(nn.Module):
         _forward = self.task_[_type]
         return _forward(queries, *args, **kwargs)
 
+
     def precompute_embeddings(self,items: List[FashionItem])->np.ndarray:
         """
         使用encoder 预计算item的嵌入向量，用于后续的训练 only train
@@ -102,6 +106,7 @@ class OutfitTransformer(nn.Module):
         embeddings,_ = self._get_embeddings_and_padding_masks(items)
         item_embedding_list = embeddings[:,0,:].cpu().detach().numpy()
         return item_embedding_list
+
 
     def _cp_forward(self,
         cp_queries: List[OutfitCompatibilityPredictionTask],
