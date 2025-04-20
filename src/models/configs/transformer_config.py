@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-
+from typing import Union, Callable
+import torch.nn.functional as F
+from torch import Tensor
 
 @dataclass
 class TransformerConfig:
@@ -13,3 +15,9 @@ class TransformerConfig:
     dropout: float = 0.3 # Original: Unknown
     # 定义是否对Transformer的输出进行归一化，默认为False
     norm_out: bool = False
+
+    batch_first:bool = True,
+    norm_first:bool = True,
+    activation: Union[str, Callable[[Tensor], Tensor]] = F.mish
+
+    enable_nested_tensor: bool = False
