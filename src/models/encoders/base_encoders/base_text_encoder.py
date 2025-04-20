@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from abc import ABC, abstractmethod
 from typing import List
-
 from src.models.utils.model_utils import flatten_seq_to_one_dim
 
 

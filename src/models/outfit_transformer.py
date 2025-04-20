@@ -11,32 +11,29 @@ from configs import OutfitTransformerConfig
 from encoders import ItemEncoder
 from datatypes import FashionItem,OutfitComplementaryItemRetrievalTask,OutfitCompatibilityPredictionTask
 from typing import List, Union
+
+
 class OutfitTransformer(nn.Module):
-    def __init__(self, cfg: OutfitTransformerConfig= None):
+    def __init__(self, cfg: OutfitTransformerConfig= OutfitTransformerConfig()):
         super().__init__()
-        self.cfg = cfg if cfg is not None else OutfitTransformerConfig()
+        self.cfg = cfg
         # 1 编码器设置
         ## 1.1 服装单品编码器
-        self.item_encoder = ItemEncoder(
-            text_model_name=self.cfg.item_enc_text_model_name,
-            enc_dim_per_modality=self.cfg.item_enc_dim_per_modality,
-            enc_norm_out=self.cfg.item_enc_norm_out,
-            aggregation_method=self.cfg.aggregation_method
-        )
+        self.item_encoder = ItemEncoder(self.cfg.item_encoder)
         ## 1.2 全局服装编码器 global outfit representation
         transformer_encoder_layer = nn.TransformerEncoderLayer(
                 d_model=self.item_encoder.d_embed,
-                nhead=self.cfg.transformer_n_head,
-                dim_feedforward=self.cfg.transformer_d_ffn,
-                dropout=self.cfg.transformer_dropout,
-                batch_first=True,
-                norm_first=True,
-                activation=F.mish,
+                nhead=self.cfg.transformer.n_head,
+                dim_feedforward=self.cfg.transformer.d_ffn,
+                dropout=self.cfg.transformer.dropout,
+                batch_first=self.cfg.transformer.batch_first,
+                norm_first=self.cfg.transformer.norm_first,
+                activation=self.cfg.transformer.activation,
         )
         self.transformer_encoder =nn.TransformerEncoder(
             encoder_layer=transformer_encoder_layer,
-            num_layers=self.cfg.transformer_n_layers,
-            enable_nested_tensor=False
+            num_layers=self.cfg.transformer.n_layers,
+            enable_nested_tensor=self.cfg.transformer.enable_nested_tensor,
         )
         # ## 1.3 全局任务嵌入向量(学习全局任务的特征)
         # self.task_emb = nn.Parameter(
@@ -50,7 +47,7 @@ class OutfitTransformer(nn.Module):
         )
         ## 2.2 处理CP问题的前馈网络,输出outfit的兼容性得分 MLP
         self.cp_ffn = nn.Sequential(
-            nn.Dropout(self.cfg.transformer_dropout),
+            nn.Dropout(self.cfg.transformer.dropout),
             nn.Linear(self.item_encoder.d_embed, 1),
             nn.Sigmoid()
         )
@@ -96,13 +93,28 @@ class OutfitTransformer(nn.Module):
         _forward = self.task_[_type]
         return _forward(queries, *args, **kwargs)
 
+
+    def precompute_embeddings(self,items: List[FashionItem])->np.ndarray:
+        """
+        使用encoder 预计算item的嵌入向量，用于后续的训练 only train
+        :param items: item list
+        :return: item_embedding_list：np.ndarray（B,d_embed）
+        """
+        # (B,1)
+        items = [OutfitComplementaryItemRetrievalTask(outfit=[item]) for item in items]
+        # (B,1,d_embed)
+        embeddings,_ = self._get_embeddings_and_padding_masks(items)
+        item_embedding_list = embeddings[:,0,:].cpu().detach().numpy()
+        return item_embedding_list
+
+
     def _cp_forward(self,
         cp_queries: List[OutfitCompatibilityPredictionTask],
         use_precomputed_embedding: bool = False
      )->torch.Tensor:
         embeddings,mask = self._get_embeddings_and_padding_masks(cp_queries, use_precomputed_embedding)
         transformer_inputs = torch.cat([
-                self.outfit_token.view(1, 1, -1).expand(len(cp_queries), -1, -1), # (B,1,d_embed)
+                self.outfit_token.view(1, 1, -1).expand(len(cp_queries), -1, -1), # (B,1,d_embed) d_embed=item_encoder.d_embed
                 embeddings # (B,L,d_embed)
              ],dim=1) # (B,1+L,d_embed)
         mask = torch.cat([
@@ -127,7 +139,7 @@ class OutfitTransformer(nn.Module):
             query.outfit=[query.target_item]+query.outfit
         # [B,1+L,d_embed]
         embeddings,mask = self._get_embeddings_and_padding_masks(cir_queries, use_precomputed_embedding)
-        image_embedding_index=self.cfg.d_embed//2
+        image_embedding_index=self.item_encoder.d_embed//2
         embeddings[:,0,:image_embedding_index] = self.target_item_image_emb.view(1, -1)
         transformer_outputs = self.transformer_encoder(
             src=embeddings,
@@ -142,6 +154,12 @@ class OutfitTransformer(nn.Module):
             items: List[FashionItem],
             use_precomputed_embedding: bool = False
         )->torch.Tensor:
+        """
+        训练完后被使用,用于构建目标item的嵌入向量，该嵌入用于计算相似度（FAISS）
+        :param items:
+        :param use_precomputed_embedding:
+        :return:输出单品的embedding，用于和cir任务输出的目标单品embedding进行相似度查询，即knn(cir_embedding)≈knn(item_embedding)
+        """
         # (B,1)
         items = [OutfitComplementaryItemRetrievalTask(outfit=[item]) for item in items]
         # (B,1,d_embed)
@@ -202,7 +220,6 @@ class OutfitTransformer(nn.Module):
             dtype=torch.bool,
             device=self.device
         )
-        # TODO:确保embedding进行过归一化
         return embeddings,mask
 
 

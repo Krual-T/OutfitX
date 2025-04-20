@@ -7,7 +7,7 @@ from typing import List
 from typing import Dict, Any
 
 from src.models.encoders.base_encoders import BaseTextEncoder
-from src.models.utils.model_utils import freeze_model, mean_pooling, flatten_seq_to_one_dim
+from src.models.utils.model_utils import freeze_model, mean_pooling
 
 
 class HuggingFaceTextEncoder(BaseTextEncoder):

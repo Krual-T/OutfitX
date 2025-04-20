@@ -1,39 +1,33 @@
 from torch import nn
 from image_encoders import Resnet18ImageEncoder
 from text_encoders import HuggingFaceTextEncoder
+from src.models.encoders.image_encoders import CLIPImageEncoder
+from src.models.encoders.text_encoders import CLIPTextEncoder
 from src.models.utils.model_utils import aggregate_embeddings
-
+from src.models.configs.item_encoder_config import ItemEncoderConfig
 class ItemEncoder(nn.Module):
-    def __init__(
-            self,
-            model_name,
-            enc_dim_per_modality,
-            enc_norm_out,
-            aggregation_method
-    ):
+    def __init__(self,cfg: ItemEncoderConfig):
         super().__init__()
-        self.enc_dim_per_modality = enc_dim_per_modality
-        self.aggregation_method = aggregation_method
-        self.enc_norm_out = enc_norm_out
-        self._build_encoders(model_name)
-
-    def _build_encoders(self, model_name):
-        self.image_enc = Resnet18ImageEncoder(
-            embedding_size=self.enc_dim_per_modality,
-        )
-        self.text_enc = HuggingFaceTextEncoder(
-            embedding_size=self.enc_dim_per_modality,
-            model_name_or_path=model_name
-        )
+        self.cfg = cfg
+        if self.cfg.type == 'resnet_hf_sentence_bert':
+            self.image_enc = Resnet18ImageEncoder(
+                d_embed=self.cfg.dim_per_modality,
+            )
+            self.text_enc = HuggingFaceTextEncoder(
+                d_embed=self.cfg.dim_per_modality,
+                model_name_or_path=cfg.text_model_name
+            )
+        elif cfg.type == 'clip':
+            self.image_enc = CLIPImageEncoder(
+                model_name_or_path=cfg.clip_model_name
+            )
+            self.text_enc = CLIPTextEncoder(
+                model_name_or_path=cfg.clip_model_name
+            )
 
     @property
     def d_embed(self):
-        if self.aggregation_method == 'concat':
-            d_model = self.enc_dim_per_modality * 2
-        else:
-            d_model = self.enc_dim_per_modality
-
-        return d_model
+        return self.cfg.dim_per_modality * 2 if self.cfg.aggregation_method == 'concat' else self.cfg.dim_per_modality
 
     @property
     def image_size(self):
@@ -42,16 +36,16 @@ class ItemEncoder(nn.Module):
     def forward(self, images, texts, *args, **kwargs):
         # Encode images and texts
         image_embeddings = self.image_enc(
-            images, normalize=self.enc_norm_out, *args, **kwargs
+            images, normalize=self.cfg.norm_out, *args, **kwargs
         )
         text_embeddings = self.text_enc(
-            texts, normalize=self.enc_norm_out, *args, **kwargs
+            texts, normalize=self.cfg.norm_out, *args, **kwargs
         )
         # Aggregate embeddings
         encoder_outputs = aggregate_embeddings(
             image_embeddings=image_embeddings,
             text_embeddings=text_embeddings,
-            aggregation_method=self.aggregation_method
+            aggregation_method=self.cfg.aggregation_method
         )
 
         return encoder_outputs

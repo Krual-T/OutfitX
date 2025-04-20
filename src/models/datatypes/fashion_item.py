@@ -1,9 +1,9 @@
-from typing import Optional
+import numpy as np
 
-from typing import List, Optional, TypedDict, Union
+from typing import Optional
 from PIL import Image
 from pydantic import BaseModel, Field
-import numpy as np
+
 
 class FashionItem(BaseModel):
     item_id: Optional[int] = Field(
