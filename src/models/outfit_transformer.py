@@ -96,7 +96,7 @@ class OutfitTransformer(nn.Module):
      )->torch.Tensor:
         embeddings,mask = self._get_embeddings_and_padding_masks(cp_queries, use_precomputed_embedding)
         transformer_inputs = torch.cat([
-                self.outfit_token.view(1, 1, -1).expand(len(cp_queries), -1, -1), # (B,1,d_embed)
+                self.outfit_token.view(1, 1, -1).expand(len(cp_queries), -1, -1), # (B,1,d_embed) d_embed=item_encoder.d_embed
                 embeddings # (B,L,d_embed)
              ],dim=1) # (B,1+L,d_embed)
         mask = torch.cat([
