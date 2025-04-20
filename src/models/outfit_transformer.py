@@ -11,9 +11,9 @@ from typing import List, Union
 
 
 class OutfitTransformer(nn.Module):
-    def __init__(self, cfg: OutfitTransformerConfig= None):
+    def __init__(self, cfg: OutfitTransformerConfig= OutfitTransformerConfig()):
         super().__init__()
-        self.cfg = cfg if cfg is not None else OutfitTransformerConfig()
+        self.cfg = cfg
         # 1 编码器设置
         ## 1.1 服装单品编码器
         self.item_encoder = ItemEncoder(self.cfg.item_encoder)
@@ -89,6 +89,19 @@ class OutfitTransformer(nn.Module):
         _type = type(queries[0])
         _forward = self.task_[_type]
         return _forward(queries, *args, **kwargs)
+
+    def precompute_embeddings(self,items: List[FashionItem])->np.ndarray:
+        """
+        使用encoder 预计算item的嵌入向量，用于后续的训练 only train
+        :param items: item list
+        :return: item_embedding_list：np.ndarray（B,d_embed）
+        """
+        # (B,1)
+        items = [OutfitComplementaryItemRetrievalTask(outfit=[item]) for item in items]
+        # (B,1,d_embed)
+        embeddings,_ = self._get_embeddings_and_padding_masks(items)
+        item_embedding_list = embeddings[:,0,:].cpu().detach().numpy()
+        return item_embedding_list
 
     def _cp_forward(self,
         cp_queries: List[OutfitCompatibilityPredictionTask],
@@ -202,7 +215,6 @@ class OutfitTransformer(nn.Module):
             dtype=torch.bool,
             device=self.device
         )
-        # TODO:确保embedding进行过归一化
         return embeddings,mask
 
 

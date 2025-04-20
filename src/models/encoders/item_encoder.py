@@ -18,7 +18,6 @@ class ItemEncoder(nn.Module):
                 model_name_or_path=cfg.text_model_name
             )
         elif cfg.type == 'clip':
-            # TODO检查clip的输出维度
             self.image_enc = CLIPImageEncoder(
                 model_name_or_path=cfg.clip_model_name
             )
