@@ -1,9 +1,8 @@
 from torch import nn
 from image_encoders import Resnet18ImageEncoder
+from text_encoders import HuggingFaceTextEncoder
 from src.models.encoders.image_encoders import CLIPImageEncoder
 from src.models.encoders.text_encoders import CLIPTextEncoder
-from text_encoders import HuggingFaceTextEncoder
-
 from src.models.utils.model_utils import aggregate_embeddings
 from src.models.configs.item_encoder_config import ItemEncoderConfig
 class ItemEncoder(nn.Module):
@@ -19,6 +18,7 @@ class ItemEncoder(nn.Module):
                 model_name_or_path=cfg.text_model_name
             )
         elif cfg.type == 'clip':
+            # TODO检查clip的输出维度
             self.image_enc = CLIPImageEncoder(
                 model_name_or_path=cfg.clip_model_name
             )

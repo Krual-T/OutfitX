@@ -5,7 +5,6 @@ import numpy as np
 from typing import List
 from torchvision.models import resnet18, ResNet18_Weights
 from torchvision import transforms
-
 from src.models.encoders.base_encoders import BaseImageEncoder
 from src.models.utils.model_utils import freeze_model, flatten_seq_to_one_dim
 

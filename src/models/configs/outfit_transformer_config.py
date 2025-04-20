@@ -1,10 +1,8 @@
 from dataclasses import dataclass
-from typing import Literal, Union, Callable
-import torch.nn.functional as F
-from torch import Tensor
+from typing import Literal
 
-from src.models.configs.item_encoder_config import ItemEncoderConfig
-from src.models.configs.transformer_config import TransformerConfig
+from item_encoder_config import ItemEncoderConfig
+from transformer_config import TransformerConfig
 
 
 @dataclass

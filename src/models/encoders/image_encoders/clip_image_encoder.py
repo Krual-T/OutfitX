@@ -3,8 +3,7 @@ import numpy as np
 
 from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
 from typing import List, Dict, Any
-
-from src.models.utils.model_utils import freeze_model, flatten_seq_to_one_dim
+from src.models.utils.model_utils import freeze_model
 from src.models.encoders.base_encoders import BaseImageEncoder
 
 class CLIPImageEncoder(BaseImageEncoder):

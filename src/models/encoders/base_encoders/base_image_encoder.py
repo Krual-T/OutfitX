@@ -5,9 +5,7 @@ import numpy as np
 
 from abc import ABC, abstractmethod
 from typing import List, Union
-
 from PIL import Image
-
 from src.models.utils.model_utils import flatten_seq_to_one_dim
 
 

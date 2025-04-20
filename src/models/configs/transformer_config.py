@@ -1,6 +1,7 @@
+import torch.nn.functional as F
+
 from dataclasses import dataclass
 from typing import Union, Callable
-import torch.nn.functional as F
 from torch import Tensor
 
 @dataclass
