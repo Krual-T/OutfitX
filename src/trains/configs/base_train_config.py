@@ -1,22 +1,26 @@
 import pathlib
-from abc import ABC, abstractmethod
+import torch
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Literal
 
-ROOT_DIR = pathlib.Path(__file__).parent.parent.parent.parent.absolute()
 
+
+ROOT_DIR = pathlib.Path(__file__).parent.parent.parent.parent.absolute()
+WANDB_KEY = 'd88f9f90e3e7f7459c00a66f323751a06e87d997'
 @dataclass
 class BaseTrainConfig(ABC):
     # 数据集配置
     dataset_name: str = 'polyvore'
     # 分布式配置
+    n_workers_per_gpu: int = 4
+    world_size: int = -1
     @property
     @abstractmethod
     def batch_sz_per_gpu(self) -> int:
         pass
-    n_workers_per_gpu: int = 4
-    world_size: int = -1
+
 
     # 训练配置
     n_epochs: int = 200
@@ -25,12 +29,21 @@ class BaseTrainConfig(ABC):
     accumulation_steps: int = 4
     seed: int = 42
 
-    # 日志配置 TODO: 申请密钥
-    wandb_key: str = None
-    project_name: str = None
+    # 日志配置
+    wandb_key: str = WANDB_KEY
+    @property
+    @abstractmethod
+    def project_name(self) -> str:
+        pass
     # 模式配置
     demo: bool = False
+
     def __post_init__(self):
         self.dataset_dir = ROOT_DIR / 'datasets' / self.dataset_name
+        self.checkpoint_dir = ROOT_DIR / 'checkpoints' / self.project_name
+        if self.world_size == -1:
+            self.world_size = torch.cuda.device_count()
+
         if self.dataset_name == 'polyvore':
             self.polyvore_type:Literal['nondisjoint', 'disjoint'] ='nondisjoint'
+
