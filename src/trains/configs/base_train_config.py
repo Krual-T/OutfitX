@@ -16,6 +16,7 @@ class BaseTrainConfig(ABC):
     # 分布式配置
     n_workers_per_gpu: int = 4
     world_size: int = -1
+    backend:Literal['nccl', 'gloo']='gloo'
     @property
     @abstractmethod
     def batch_sz_per_gpu(self) -> int:
@@ -41,6 +42,7 @@ class BaseTrainConfig(ABC):
     def __post_init__(self):
         self.dataset_dir = ROOT_DIR / 'datasets' / self.dataset_name
         self.checkpoint_dir = ROOT_DIR / 'checkpoints' / self.project_name
+        self.precomputed_embedding_dir = self.dataset_dir / 'precomputed_embeddings'
         if self.world_size == -1:
             self.world_size = torch.cuda.device_count()
 
