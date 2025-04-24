@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-
+PROJECT_NAME = '基于CNN-Transformer跨模态融合的穿搭推荐模型研究'
 ROOT_DIR = pathlib.Path(__file__).parent.parent.parent.parent.absolute()
 WANDB_KEY = 'd88f9f90e3e7f7459c00a66f323751a06e87d997'
+
 @dataclass
 class BaseTrainConfig(ABC):
     # 数据集配置
@@ -32,9 +33,15 @@ class BaseTrainConfig(ABC):
 
     # 日志配置
     wandb_key: str = WANDB_KEY
+    project_name: str = PROJECT_NAME
+    LOG_DIR:pathlib.Path = None
     @property
     @abstractmethod
-    def project_name(self) -> str:
+    def auto_save_checkpoint(self) -> bool:
+        pass
+    @property
+    @abstractmethod
+    def name(self) -> str:
         pass
     # 模式配置
     demo: bool = False
