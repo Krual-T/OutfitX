@@ -4,7 +4,7 @@ import pathlib
 from abc import ABC, abstractmethod
 import logging
 import random
-from typing import Dict, Any, Literal
+from typing import Dict, Any, Literal, final
 
 import numpy as np
 import torch
@@ -54,6 +54,8 @@ class DistributedTrainer(ABC):
             raise RuntimeError("需在 with 语句中使用 DistributedTrainer。")
 
         for epoch in range(self.cfg.n_epochs):
+            epoch_errs = [None]*self.world_size
+            local_err_msg = None
             try:
                 # 可选：在训练阶段设置随机种子
                 if self.train_loader and hasattr(self.train_loader.sampler, 'set_epoch'):
@@ -78,27 +80,24 @@ class DistributedTrainer(ABC):
 
                 # 自定义任务
                 self.custom_task(epoch=epoch)
-
-            except Exception as e:
+            except (KeyboardInterrupt,Exception) as e:
                 # 捕获异常，上报并广播至所有进程
-                msg = f"Epoch {epoch} 异常: {e}"
-                print(msg)
-                self.log(msg, level="error")
-                _ = self.broadcast_termination_signal(encountered=True)
-                raise e
+                local_err_msg = self.build_error_msg(epoch, e)
+            finally:
+                dist.all_gather_object(epoch_errs,local_err_msg)# 阻塞并广播本地情况到所有进程
+                for err in epoch_errs:
+                    if err is not None:
+                        self.log(str(err))
+                        raise Exception(err)
+                dist.barrier()
+                if self.rank == 0 and self.train_loader and self.cfg.auto_save_checkpoint:
+                    self.log(f"[Checkpoint] Saved to {self.save_checkpoint(epoch)}")
 
-            # 检查是否有其他进程请求终止
-            if self.broadcast_termination_signal():
-                self.log("收到终止信号，退出训练", level="warning")
-                break
-
-            # 全局同步：等待所有进程到此点，确保 checkpoint 存储时一致
-            dist.barrier()
-
-            # 保存检查点（仅在 rank0）
-            if self.rank == 0 and self.train_loader and self.cfg.auto_save_checkpoint:
-                self.save_checkpoint(epoch)
-                # self.load_checkpoint(checkpoint_path)
+    def build_error_msg(self,epoch:int,e:BaseException)->str:
+        import traceback as tb_module
+        tb_str = "".join(tb_module.format_exception(type(e), e, e.__traceback__))
+        error_msg = f"[Rank {self.rank} | Epoch {epoch}] \n" + tb_str
+        return error_msg
 
     def setup_logger(self):
         # 只有 rank 0 创建日志文件
@@ -130,24 +129,22 @@ class DistributedTrainer(ABC):
                     name=self.cfg.name
                 )
     def setup_seed(self):
-        random.seed(self.cfg.seed)
-        os.environ['PYTHONHASHSEED'] = str(self.cfg.seed)
-        np.random.seed(self.cfg.seed)
-        torch.manual_seed(self.cfg.seed)
-        torch.cuda.manual_seed(self.cfg.seed)
-        torch.cuda.manual_seed_all(self.cfg.seed)
+        seed = self.cfg.seed+self.rank
+        random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
     def setup_ddp_env(self):
-        self.local_rank = int(os.environ["LOCAL_RANK"])
-        self.rank = int(os.environ["RANK"])
-        self.world_size = int(os.environ["WORLD_SIZE"])
         dist.init_process_group(backend=self.cfg.backend, init_method="env://")
 
     def setup(self):
         if not self._entered:
-            raise RuntimeError("DistributedTrainer must be used in a 'with' block")
+            raise RuntimeError("DistributedTrainer must be run as torchrun command and used in a 'with' block  ")
         setup_completed = lambda msg: self.log(f"{msg} 初始化完成",level="info")
         setup_failed = lambda msg: self.log(f"{msg} 初始化失败", level="error")
         not_setup = lambda msg: self.log(f"{msg} 未初始化",level="warning")
@@ -158,19 +155,19 @@ class DistributedTrainer(ABC):
         except Exception as e:
             print("logger 初始化失败")
             raise e
-        # 初始化随机种子
-        try:
-            self.setup_seed()
-            setup_completed("seed")
-        except Exception as e:
-            setup_failed("seed")
-            raise e
         # 初始化分布式环境
         try:
             self.setup_ddp_env()
             setup_completed("ddp_environment")
         except Exception as e:
             setup_failed("ddp_environment")
+            raise e
+        # 初始化随机种子
+        try:
+            self.setup_seed()
+            setup_completed("seed")
+        except Exception as e:
+            setup_failed("seed")
             raise e
         # 初始化模型
         try:
@@ -180,9 +177,16 @@ class DistributedTrainer(ABC):
             if torch.cuda.is_available():
                 torch.cuda.set_device(self.local_rank)
                 model.cuda(self.local_rank)
-                self.model: DDP = DDP(model, device_ids=[self.local_rank])
+                self.model: DDP = DDP(
+                    module=model,
+                    find_unused_parameters=self.cfg.find_unused_parameters,
+                    device_ids=[self.local_rank]
+                )
             else:
-                self.model: DDP = DDP(model)
+                self.model: DDP = DDP(
+                    module= model,
+                    find_unused_parameters=self.cfg.find_unused_parameters
+                )
             setup_completed("model")
         except Exception as e:
             setup_failed("model")
@@ -249,21 +253,20 @@ class DistributedTrainer(ABC):
     def save_checkpoint(self, epoch):
         checkpoint_dir = self.cfg.checkpoint_dir
         os.makedirs(checkpoint_dir, exist_ok=True)
-        checkpoint_path = os.path.join(checkpoint_dir, f'epoch_{epoch+1}.pth')
-        if self.rank == 0:
-            torch.save({
-                'epoch': epoch,
-                'config': self.model.module.cfg.__dict__,
-                'model': self.model.module.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-                'scheduler': self.scheduler.state_dict() if self.scheduler else None,
-                'scaler': self.scaler.state_dict() if self.scaler else None,
-            }, checkpoint_path)
-            self.logger.info(f"[Checkpoint] Saved to {checkpoint_path}")
+        checkpoint_path = os.path.join(checkpoint_dir, f'epoch_{epoch}.pth')
+        torch.save({
+            'epoch': epoch,
+            'config': self.model.module.cfg.__dict__,
+            'model': self.model.module.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'scheduler': self.scheduler.state_dict() if self.scheduler else None,
+            'scaler': self.scaler.state_dict() if self.scaler else None,
+        }, checkpoint_path)
+        return checkpoint_path
 
-    def load_checkpoint(self, ckpt_path: str):
+    def load_checkpoint(self, ckpt_path: str,*args,**kwargs):
         map_location = f'cuda:{self.local_rank}' if torch.cuda.is_available() else 'cpu'
-        ckpt = torch.load(ckpt_path, map_location=map_location, weights_only=False)
+        ckpt = torch.load(ckpt_path,*args,map_location=map_location,**kwargs)
         self.model.module.load_state_dict(ckpt['model'])
         self.optimizer.load_state_dict(ckpt['optimizer'])
         if self.scheduler and ckpt['scheduler']:
@@ -271,30 +274,25 @@ class DistributedTrainer(ABC):
         if self.scaler and ckpt['scaler']:
             self.scaler.load_state_dict(ckpt['scaler'])
 
-    def log(self,
-        msg: str = None,
-        logs: Dict[str:Any] = None,
-        level: Literal['info', 'warning', 'error'] = 'info'
-    ):
-        if self.rank == 0:
-            set_log = {
+    @final
+    @property
+    def set_log_(self):
+        return {
                 'info': self.logger.info,
                 'warning': self.logger.warning,
                 'error': self.logger.error
             }
-            set_log[level](msg)
+    def log(self,
+        msg: str = None,
+        metrics: Dict[str, Any] = None,
+        level: Literal['info', 'warning', 'error'] = 'info'
+    ):
+        if self.rank == 0:
 
-            if self.wandb_run is not None and logs is not None:
-                self.wandb_run.log(logs)
-    def broadcast_termination_signal(self, encountered: bool=False) -> bool:
-        """
-        各进程调用时传入自身是否遇到异常(encountered=True/False)，
-        使用 all_reduce 将所有进程的异常标志合并（取最大），
-        若最终为 True，则所有进程应优雅退出。
-        """
-        flag = torch.tensor([1 if encountered else 0], device=self.device)
-        dist.all_reduce(flag, op=dist.ReduceOp.MAX)
-        return bool(flag.item())
+            self.set_log_[level](msg)
+
+            if self.wandb_run is not None and metrics is not None:
+                self.wandb_run.log(metrics)
 
     @abstractmethod
     def load_model(self)->nn.Module:
@@ -327,6 +325,7 @@ class DistributedTrainer(ABC):
     @abstractmethod
     def train_epoch(self, epoch):
         """
+        记得在train_epoch中调用self.log()方法，将训练结果记录到日志中
         train_progress_bar =tqdm(
             self.train_loader,
             desc=f"Train Epoch {epoch + 1}/{self.cfg.n_epochs}",
@@ -336,22 +335,23 @@ class DistributedTrainer(ABC):
             if self.cfg.demo:
                 break
         :param epoch:
-        :return: train log dict
+        :return:
         """
         pass
 
     @abstractmethod
     def valid_epoch(self):
         """
-        :return: train log dict
+        记得在valid_epoch中调用self.log()方法，将验证结果记录到日志中
+        :return:
         """
         pass
 
     @abstractmethod
     def test_epoch(self):
         """
-
-        :return: test log dict
+        记得在test_epoch中调用self.log()方法，将测试结果记录到日志中
+        :return:
         """
         pass
 
@@ -372,27 +372,23 @@ class DistributedTrainer(ABC):
 """
 请使用 torchrun （recommend）命令运行程序, 例如: 
     torchrun --nproc_per_node=4 --master_port=12345(one node is optional) main.py
-或者使用 python -m torch.distributed.launch 命令运行程序, 例如: 
-    python -m torch.distributed.launch --nproc_per_node=4 --master_port=12345(one node is optional) main.py
 """
         )
         if not all(k in os.environ for k in env_required):
             raise RuntimeError(error_msg)
-
+        self.local_rank = int(os.environ["LOCAL_RANK"])
+        self.rank = int(os.environ["RANK"])
+        self.world_size = int(os.environ["WORLD_SIZE"])
         self.setup()
 
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            # 若在主进程捕获到异常，可广播终止信号
-            self.broadcast_termination_signal(True)
-            # 只有出错的rank会输出
-            time = datetime.datetime.now()
-            print(f"{time} error:rank{self.rank}")
+        dist.barrier()  # 确保所有进程都到达此处
+        if not exc_type and self.rank==0 and self.train_loader is not None and self.cfg.auto_save_checkpoint:
+            self.log(f"[Checkpoint] Saved to {self.save_checkpoint(-1)}")
+
+        if self.wandb_run is not None and self.rank == 0:
+            self.wandb_run.finish()
         # 清理分布式环境
         dist.destroy_process_group()
-
-        if self.rank==0 and self.cfg.auto_save_checkpoint:
-            self.save_checkpoint(-1)
-
