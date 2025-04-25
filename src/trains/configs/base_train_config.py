@@ -3,8 +3,7 @@ import torch
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal
-
+from typing import Literal, Optional
 
 PROJECT_NAME = '基于CNN-Transformer跨模态融合的穿搭推荐模型研究'
 ROOT_DIR = pathlib.Path(__file__).parent.parent.parent.parent.absolute()
@@ -30,11 +29,15 @@ class BaseTrainConfig(ABC):
     checkpoint: str = None
     accumulation_steps: int = 4
     seed: int = 42
+    @property
+    @abstractmethod
+    def find_unused_parameters(self)->bool:
+        pass
 
     # 日志配置
     wandb_key: str = WANDB_KEY
     project_name: str = PROJECT_NAME
-    LOG_DIR:pathlib.Path = None
+    LOG_DIR:Optional[pathlib.Path] = None
     @property
     @abstractmethod
     def auto_save_checkpoint(self) -> bool:
