@@ -136,6 +136,8 @@ class DistributedTrainer(ABC):
         torch.backends.cudnn.benchmark = False
 
     def setup_ddp_env(self):
+        # 防御性编程：确保在使用前已经正确初始化
+        self.cfg.backend = self.cfg.backend if torch.cuda.is_available() else 'gloo'
         dist.init_process_group(backend=self.cfg.backend, init_method="env://")
 
     def setup(self):
