@@ -12,3 +12,5 @@ class OutfitComplementaryItemRetrievalTask(BaseModel):
         default_factory=FashionItem,
         description="With embedding of description (no image) of target item."
     )
+    def __len__(self):
+        return len(self.outfit)

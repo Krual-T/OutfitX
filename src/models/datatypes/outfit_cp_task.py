@@ -7,3 +7,5 @@ class OutfitCompatibilityPredictionTask(BaseModel):
         default_factory=list,
         description="List of fashion items"
     )
+    def __len__(self):
+        return len(self.outfit)
