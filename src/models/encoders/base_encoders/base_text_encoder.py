@@ -17,7 +17,7 @@ class BaseTextEncoder(nn.Module, ABC):
             normalize: bool = True,
             *args, **kwargs
     ) -> torch.Tensor:
-        if self.__is_sequence_elements_length_consistent(texts):
+        if not self.__is_sequence_elements_length_consistent(texts):
             raise ValueError('All sequences in texts should have the same length.')
 
         batch_size = len(texts)
@@ -51,8 +51,8 @@ class BaseTextEncoder(nn.Module, ABC):
         raise NotImplementedError(f"属性 'd_embed' 必须在子类中实现")
 
     def __is_sequence_elements_length_consistent(
-            self,
-            texts: List[List[str]]
+        self,
+        texts: List[List[str]]
     ) -> bool:
         """
         每个文本样本（List[str]）要有一样的长度
