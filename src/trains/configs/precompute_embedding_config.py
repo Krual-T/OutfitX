@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from typing import Literal
+
 from .base_train_config import BaseTrainConfig
 
 
@@ -9,3 +11,4 @@ class PrecomputeEmbeddingConfig(BaseTrainConfig):
     name: str = 'precompute_embedding'
     n_epochs: int = 1
     auto_save_checkpoint: bool = False
+    backend:Literal['nccl', 'gloo']='nccl'
