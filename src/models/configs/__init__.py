@@ -1,1 +1,2 @@
-from outfit_transformer_config import OutfitTransformerConfig
+from .outfit_transformer_config import OutfitTransformerConfig
+from .item_encoder_config import ItemEncoderConfig

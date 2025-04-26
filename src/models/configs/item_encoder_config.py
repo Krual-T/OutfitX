@@ -19,6 +19,4 @@ class ItemEncoderConfig:
         elif self.type == 'resnet_hf_sentence_bert':
             self.text_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
             dim_per_modality_embed = 64
-
-        if self.dim_per_modality is None:
-            self.dim_per_modality:int = dim_per_modality_embed
+        self.dim_per_modality:int = dim_per_modality_embed

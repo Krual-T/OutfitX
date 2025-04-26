@@ -1,22 +1,18 @@
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from PIL import Image
-from sympy import sequence
 from torch import nn
-from torchvision.transforms.v2.functional import pad_mask
-
-from configs import OutfitTransformerConfig
-from encoders import ItemEncoder
-from datatypes import FashionItem,OutfitComplementaryItemRetrievalTask,OutfitCompatibilityPredictionTask
-from typing import List, Union
+from .configs import OutfitTransformerConfig
+from .encoders import ItemEncoder
+from .datatypes import FashionItem,OutfitComplementaryItemRetrievalTask,OutfitCompatibilityPredictionTask
+from typing import List, Union, Optional
 
 
 class OutfitTransformer(nn.Module):
-    def __init__(self, cfg: OutfitTransformerConfig= OutfitTransformerConfig()):
+    def __init__(self, cfg: Optional[OutfitTransformerConfig]= None):
         super().__init__()
-        self.cfg = cfg
+        self.cfg = cfg if cfg is not None else OutfitTransformerConfig()
         # 1 编码器设置
         ## 1.1 服装单品编码器
         self.item_encoder = ItemEncoder(self.cfg.item_encoder)
@@ -64,7 +60,7 @@ class OutfitTransformer(nn.Module):
 
         # 4 pad
         ## 4.1 用于填充文本和图片形状
-        image_size = (self.item_enc.image_size, self.item_enc.image_size)
+        image_size = (self.item_encoder.image_size, self.item_encoder.image_size)
         self.image_pad = Image.new("RGB", image_size)
         self.text_pad = ''
         ## 4.2 用于填充outfit的嵌入向量

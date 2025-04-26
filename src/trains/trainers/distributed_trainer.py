@@ -1,19 +1,16 @@
-import datetime
 import os
 import pathlib
-from abc import ABC, abstractmethod
 import logging
 import random
-from typing import Dict, Any, Literal, final
-
 import numpy as np
 import torch
-import torch.distributed as dist
 
+import torch.distributed as dist
+from abc import ABC, abstractmethod
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
-
+from typing import Dict, Any, Literal, final
 from src.trains.configs import BaseTrainConfig
 
 
@@ -48,7 +45,6 @@ class DistributedTrainer(ABC):
         self.test_loader:DataLoader = None
 
     def run(self):
-        # FIXME 死锁
         """按 cfg.n_epochs 迭代，自动执行 train/valid/test/custom_task，并在每轮末同步与保存检查点。"""
         if not self._entered:
             raise RuntimeError("需在 with 语句中使用 DistributedTrainer。")
@@ -194,9 +190,10 @@ class DistributedTrainer(ABC):
         # 初始化优化器
         try:
             self.optimizer = self.load_optimizer()
-            if self.optimizer is None:
-                raise ValueError("fn: load_optimizer() must return an optimizer")
-            setup_completed("optimizer")
+            if self.optimizer is not None:
+                setup_completed("optimizer")
+            else:
+                not_setup("optimizer")
         except Exception as e:
             setup_failed("optimizer")
             raise e

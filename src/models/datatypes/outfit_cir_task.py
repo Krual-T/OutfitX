@@ -1,6 +1,6 @@
 from typing import List
 from pydantic import BaseModel, Field
-from fashion_item import FashionItem
+from .fashion_item import FashionItem
 
 
 class OutfitComplementaryItemRetrievalTask(BaseModel):

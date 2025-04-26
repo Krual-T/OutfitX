@@ -1,2 +1,2 @@
-from precompute_embedding_config import PrecomputeEmbeddingConfig
-from base_train_config import BaseTrainConfig
+from .precompute_embedding_config import PrecomputeEmbeddingConfig
+from .base_train_config import BaseTrainConfig

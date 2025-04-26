@@ -1,2 +1,2 @@
-from base_image_encoder import BaseImageEncoder
-from base_text_encoder import BaseTextEncoder
+from .base_image_encoder import BaseImageEncoder
+from .base_text_encoder import BaseTextEncoder

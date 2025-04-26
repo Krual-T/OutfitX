@@ -1,2 +1,2 @@
-from clip_text_encoder import CLIPTextEncoder
-from hugging_face_text_encoder import HuggingFaceTextEncoder
+from .clip_text_encoder import CLIPTextEncoder
+from .hugging_face_text_encoder import HuggingFaceTextEncoder
