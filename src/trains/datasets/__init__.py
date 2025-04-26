@@ -1,1 +1,1 @@
-from polyvore import PolyvoreItemDataset
+from .polyvore import PolyvoreItemDataset

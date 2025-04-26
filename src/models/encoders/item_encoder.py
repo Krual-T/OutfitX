@@ -1,10 +1,9 @@
 from torch import nn
-from image_encoders import Resnet18ImageEncoder
-from text_encoders import HuggingFaceTextEncoder
-from src.models.encoders.image_encoders import CLIPImageEncoder
-from src.models.encoders.text_encoders import CLIPTextEncoder
+from .image_encoders import Resnet18ImageEncoder,CLIPImageEncoder
+from .text_encoders import CLIPTextEncoder,HuggingFaceTextEncoder
+
 from src.models.utils.model_utils import aggregate_embeddings
-from src.models.configs.item_encoder_config import ItemEncoderConfig
+from src.models.configs import ItemEncoderConfig
 class ItemEncoder(nn.Module):
     def __init__(self,cfg: ItemEncoderConfig):
         super().__init__()

@@ -1,6 +1,6 @@
 from typing import List
 from pydantic import BaseModel, Field
-from fashion_item import FashionItem
+from .fashion_item import FashionItem
 
 
 class OutfitComplementaryItemRetrievalTask(BaseModel):
@@ -9,6 +9,8 @@ class OutfitComplementaryItemRetrievalTask(BaseModel):
         description="List of fashion items"
     )
     target_item: FashionItem = Field(
-        default_factory=FashionItem(),
+        default_factory=FashionItem,
         description="With embedding of description (no image) of target item."
     )
+    def __len__(self):
+        return len(self.outfit)

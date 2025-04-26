@@ -1,1 +1,1 @@
-from item_encoder import ItemEncoder
+from .item_encoder import ItemEncoder

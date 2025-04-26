@@ -2,7 +2,6 @@ import json
 
 from PIL import Image
 from torch.utils.data import Dataset
-
 from src.models.datatypes import FashionItem
 
 
@@ -16,10 +15,13 @@ class PolyvoreItemDataset(Dataset):
             load_image: bool = False
     ):
         self.dataset_dir = dataset_dir
-        metadata_path = dataset_dir / 'item_metadata.json'
-        with open(dataset_dir) as f:
-            metadata_ = json.load(f)
-        self.metadata = {item['item_id']: item for item in metadata_}
+        if metadata is None:
+            metadata_path = dataset_dir / 'item_metadata.json'
+            with open(metadata_path) as f:
+                metadata_original = json.load(f)
+            self.metadata = {item['item_id']: item for item in metadata_original}
+        else:
+            self.metadata = metadata
         self.load_image = load_image
         self.embedding_dict = embedding_dict
         self.all_item_ids = list(self.metadata.keys())
@@ -31,10 +33,24 @@ class PolyvoreItemDataset(Dataset):
         item_id = self.all_item_ids[idx]
         return self.get_item(item_id)
 
+
     def get_item(self, item_id) -> FashionItem:
+        """
+        metadata_item:
+            {
+                "item_id": 211990161,
+                "url_name": "neck print chiffon plus size",
+                "description": "",
+                "catgeories": "",
+                "title": "",
+                "related": "",
+                "category_id": 15,
+                "semantic_category": "tops"
+            }
+        """
         metadata_item = self.metadata[item_id]
-        category = metadata_item['category']
-        description = metadata_item['description']
+        category = metadata_item['semantic_category']
+        description = metadata_item['title'] if metadata_item['title'] else metadata_item['url_name']
         embedding = self.embedding_dict[item_id] if self.embedding_dict else None
         image = None
         if self.load_image:
@@ -48,3 +64,4 @@ class PolyvoreItemDataset(Dataset):
             image=image,
             metadata=metadata_item
         )
+        return item

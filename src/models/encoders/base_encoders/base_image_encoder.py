@@ -20,7 +20,7 @@ class BaseImageEncoder(nn.Module, ABC):
             normalize: bool = True,
             *args, **kwargs
     ) -> torch.Tensor:
-        if not self._is_sequence_elements_length_consistent(images):
+        if not self.__is_sequence_elements_length_consistent(images):
             raise ValueError('All sequences in images should have the same length.')
 
         # 获取batch大小
@@ -71,6 +71,7 @@ class BaseImageEncoder(nn.Module, ABC):
         self._property_not_implemented()
 
     def __is_sequence_elements_length_consistent(
+            self,
             images: List[List[np.ndarray]]
     ) -> bool:
         """

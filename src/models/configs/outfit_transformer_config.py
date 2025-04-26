@@ -1,8 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
-from item_encoder_config import ItemEncoderConfig
-from transformer_config import TransformerConfig
+from .item_encoder_config import ItemEncoderConfig
+from .transformer_config import TransformerConfig
 
 
 @dataclass
@@ -16,5 +16,5 @@ class OutfitTransformerConfig:
     # 定义嵌入维度，默认为128 这个输出要和item_encoder的输出维度一致
     d_embed: int = 128
 
-    item_encoder: ItemEncoderConfig = ItemEncoderConfig()
-    transformer: TransformerConfig = TransformerConfig()
+    item_encoder: ItemEncoderConfig = field(default_factory=ItemEncoderConfig)
+    transformer: TransformerConfig = field(default_factory=TransformerConfig)
