@@ -51,6 +51,7 @@ class BaseTextEncoder(nn.Module, ABC):
         raise NotImplementedError(f"属性 'd_embed' 必须在子类中实现")
 
     def __is_sequence_elements_length_consistent(
+            self,
             texts: List[List[str]]
     ) -> bool:
         """

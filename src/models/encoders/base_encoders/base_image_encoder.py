@@ -71,6 +71,7 @@ class BaseImageEncoder(nn.Module, ABC):
         self._property_not_implemented()
 
     def __is_sequence_elements_length_consistent(
+            self,
             images: List[List[np.ndarray]]
     ) -> bool:
         """
