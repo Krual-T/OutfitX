@@ -16,22 +16,132 @@ from src.trains.configs import BaseTrainConfig
 
 class DistributedTrainer(ABC):
     """
-    must be used in a 'with' block
-    and run command: torchrun --nproc_per_node=4 --master_port=12345 main.py
-    with DistributedTrainer(cfg) as trainer:
-        trainer.run()
+    必须在 'with' 语句中使用，并运行命令：
+
+        torchrun --nproc_per_node=4 --master_port=12345 main.py
+
+    ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    :example：
+        with DistributedTrainer(cfg) as trainer:
+            trainer.run()
+
+    ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    Parameters:
+        run_mode: str
+
+            - 'train-valid': 仅执行 train_epoch 和 valid_epoch，不执行 test_epoch 和 custom_task。方法中包含关于 train/valid 的分布式训练提醒。
+
+            - 'test': 仅执行测试
+
+            - 'custom': 自定义任务
+
+            如果以上模式无法满足需求，可以自定义实现 running_epoch 方法（以 epoch 为单位）或重写 run 方法，但仍建议参考我的 run 方法实现。
+
+        cfg: BaseTrainConfig(包含训练过程所需的配置项)：
+
+            - project_name: 项目名称
+
+            - name: 实验名称（可选）
+
+            - seed: 随机种子
+
+            - n_epochs: 总训练轮数
+
+            - batch_size: 每批次样本数
+
+            - auto_save_checkpoint: 是否自动保存检查点
+
+            - checkpoint_dir: 保存检查点的目录
+
+            - LOG_DIR: 日志目录（可选）
+
+            - wandb_key: 用于登录 WandB 的 API 密钥（可选）
+
+            - backend: 分布式训练所使用的后端（如 NCCL、Gloo 等）
+
+            - find_unused_parameters: 是否查找未使用的参数
+
+            - 其他自定义配置项（例如优化器参数、调度器配置等）
+
+    注意：
+        - 抽象方法并非都需要实现，具体实现根据需求决定。
+        - setup 方法会根据 cfg 中的配置，初始化训练过程所需的各种组件，如日志记录器、分布式环境、模型、优化器、学习率调节器等。
+
+    关于 setup 和 load 开头的方法：
+        - setup 开头的方法不会返回值，而是直接注册到 self 中。
+        - load 开头的方法会返回一个对象，并自动注册到 self 中。
+
+    关于日志：
+        - setup_logger 支持 wandb（当 cfg.WANDB_KEY 不为 None）以及本地日志记录，具体请查看方法文档。
+        - 提供 self.log 方法用于打印日志（支持 wandb），具体请查看方法文档。
+        - 如果您有特殊的日志需求，建议自行重写 setup_logger 和 log 方法（但不推荐）。
+
+    强制要求定义的几个 DataLoader 名称，请在 setup_dataloaders 中初始化（直接注册到 self 中，而非返回）：
+        - self.train_loader: DataLoader = None
+        - self.valid_loader: DataLoader = None
+        - self.test_loader: DataLoader = None
+
+    关于分布式方法：
+        TODO：完成文档说明
+
+    api:
+        - self.build_error_msg: 用于构建错误信息，具体请查看方法文档。
+        - self.save_checkpoint: 用于保存检查点，具体请查看方法文档。
+        - self.load_checkpoint: 用于加载检查点，具体请查看方法文档。
+        - self.log: 用于打印日志，具体请查看方法文档。
+        - self.set_log_: 用于设置日志级别（log内部调用），具体请查看方法文档。
+
+    内部所有属性：
+        - self.cfg = cfg
+        - self.run_mode = run_mode
+        - self.local_rank = None
+        - self.rank = None
+        - self.world_size = None
+        - self.model: nn.Module = None
+        - self.optimizer = None
+        - self.scheduler = None
+        - self.scaler = None
+        - self.logger = None
+        - self.wandb_run = None
+        - self._entered = False
+        - self.train_loader: DataLoader = None
+        - self.valid_loader: DataLoader = None
+        - self.test_loader: DataLoader = None
+
+    内部所有方法：
+        - setup_logger: 设置日志记录
+        - setup_ddp_env: 设置分布式训练环境
+        - setup_seed: 设置随机种子
+        - setup: 初始化各个组件
+        - save_checkpoint: 保存模型检查点
+        - load_checkpoint: 加载模型检查点
+        - build_error_msg: 构建错误信息
+        - running_epoch: 根据 run_mode 执行相应的训练/验证/测试任务
+        - run: 按照 cfg.n_epochs 进行训练迭代
+        - log: 记录日志
+
+    不推荐重写的方法：
+        - __enter__
+        - __exit__
+        - __init__
+        - setup
+        - run
+        - build_error_msg
+        - log
     """
     def __init__(
         self,
         cfg:BaseTrainConfig,
+        run_mode:Literal['train-valid','test','custom'] = 'custom'
     ):
         self.cfg = cfg
-
+        self.run_mode = run_mode
         self.local_rank = None
         self.rank = None
         self.world_size = None
-        # self.num_workers = cfg.n_workers_per_gpu
-        # self.batch_size = cfg.batch_sz_per_gpu
+
 
         self.model :nn.Module = None
         self.optimizer = None
@@ -43,9 +153,25 @@ class DistributedTrainer(ABC):
         self.train_loader:DataLoader = None
         self.valid_loader:DataLoader = None
         self.test_loader:DataLoader = None
+        # self.num_workers = cfg.n_workers_per_gpu
+        # self.batch_size = cfg.batch_sz_per_gpu
+
+    def running_epoch(self,epoch:int):
+        if self.run_mode == 'train-valid':
+            self.train_epoch(epoch)
+            self.valid_epoch()
+        elif self.run_mode == 'test':
+            self.test_epoch()
+        elif self.run_mode == 'custom':
+            # 自定义任务
+            self.custom_task(epoch=epoch)
 
     def run(self):
-        """按 cfg.n_epochs 迭代，自动执行 train/valid/test/custom_task，并在每轮末同步与保存检查点。"""
+        """
+        运行训练过程，根据 cfg.n_epochs 进行训练迭代。
+        每个 epoch 都会执行 running_epoch 方法，根据 run_mode 执行相应的训练/验证/测试任务/自定义任务。
+        :return:
+        """
         if not self._entered:
             raise RuntimeError("需在 with 语句中使用 DistributedTrainer。")
 
@@ -53,29 +179,7 @@ class DistributedTrainer(ABC):
             epoch_errs = [None]*self.world_size
             local_err_msg = None
             try:
-                # 可选：在训练阶段设置随机种子
-                if self.train_loader and hasattr(self.train_loader.sampler, 'set_epoch'):
-                    self.train_loader.sampler.set_epoch(epoch)
-
-                # 训练阶段
-                if self.train_loader:
-                    self.model.train()
-                    self.train_epoch(epoch)
-                    if self.scheduler:
-                        self.scheduler.step()
-
-                # 验证阶段
-                if self.valid_loader:
-                    self.model.eval()
-                    self.valid_epoch()
-
-                # 测试阶段
-                if self.test_loader:
-                    self.model.eval()
-                    self.test_epoch()
-
-                # 自定义任务
-                self.custom_task(epoch=epoch)
+                self.running_epoch(epoch)
             except (KeyboardInterrupt,Exception) as e:
                 # 捕获异常，上报并广播至所有进程
                 local_err_msg = self.build_error_msg(epoch, e)
@@ -90,6 +194,12 @@ class DistributedTrainer(ABC):
                     self.log(f"[Checkpoint] Saved to {self.save_checkpoint(epoch)}")
 
     def build_error_msg(self,epoch:int,e:BaseException)->str:
+        """
+        构建错误信息，包含异常类型、异常信息和堆栈跟踪信息。
+        :param epoch: 当前 epoch 数
+        :param e: 捕获的异常
+        :return: error_msg:str
+        """
         import traceback as tb_module
         tb_str = "".join(tb_module.format_exception(type(e), e, e.__traceback__))
         error_msg = f"[Rank {self.rank} | Epoch {epoch}] \n" + tb_str
@@ -250,6 +360,19 @@ class DistributedTrainer(ABC):
             raise e
 
     def save_checkpoint(self, epoch):
+        """
+        保存模型检查点，包括模型参数、优化器状态、学习率调节器状态、scaler状态。
+        检查点文件名为 epoch_{epoch}.pth，保存在 cfg.checkpoint_dir 目录下。
+        注意：
+            1. 检查点文件会被保存到所有进程中，因此需要在所有进程中都能访问到(建议rank==0时调用)。
+            2. 检查点文件会被保存到 cfg.checkpoint_dir 目录下，因此需要确保该目录存在。
+            3. 如果使用rank==0调用，最好在if外调用dist.barrier()，以确保进程统一。
+            4. 保存的检查点不是ddp模型，而是原始模型（没有module），可以直接被load_checkpoint加载。
+        :param epoch:int
+            当前训练轮数
+        :return: checkpoint_path:str
+            检查点文件路径
+        """
         checkpoint_dir = self.cfg.checkpoint_dir
         os.makedirs(checkpoint_dir, exist_ok=True)
         checkpoint_path = os.path.join(checkpoint_dir, f'epoch_{epoch}.pth')
@@ -264,6 +387,16 @@ class DistributedTrainer(ABC):
         return checkpoint_path
 
     def load_checkpoint(self, ckpt_path: str,*args,**kwargs):
+        """
+        加载模型检查点，包括模型参数、优化器状态、学习率调节器状态、scaler状态。
+        注意：
+            1. 检查点文件会被加载到所有进程中，因此需要在所有进程中都能访问到。
+            2. 不要在with以外使用
+        :param ckpt_path:str
+        :param args:
+        :param kwargs:
+        :return:
+        """
         map_location = f'cuda:{self.local_rank}' if torch.cuda.is_available() else 'cpu'
         ckpt = torch.load(ckpt_path,*args,map_location=map_location,**kwargs)
         self.model.module.load_state_dict(ckpt['model'])
@@ -276,6 +409,17 @@ class DistributedTrainer(ABC):
     @final
     @property
     def set_log_(self):
+        """
+        就是一个类变量（Dict）
+        用于设置日志级别，支持 wandb（当 cfg.WANDB_KEY 不为 None）以及本地日志记录。
+        使用方式：
+            self.set_log_['info']
+        :return: {
+                'info': self.logger.info,
+                'warning': self.logger.warning,
+                'error': self.logger.error
+            }[key]
+        """
         return {
                 'info': self.logger.info,
                 'warning': self.logger.warning,
@@ -286,6 +430,16 @@ class DistributedTrainer(ABC):
         metrics: Dict[str, Any] = None,
         level: Literal['info', 'warning', 'error'] = 'info'
     ):
+        """
+        打印日志，支持 wandb（当 cfg.WANDB_KEY 不为 None）以及本地日志记录。
+        :param msg: str
+            日志信息
+        :param metrics: Dict[str, Any]
+            日志信息中的指标（只会用于wandb，如果要写在日志中，请在本实现的基础上重写加入功能，因为没有提供钩子）
+        :param level: Literal['info', 'warning', 'error']
+            日志级别
+        :return:
+        """
         if self.rank == 0:
 
             self.set_log_[level](msg)
