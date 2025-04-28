@@ -2,6 +2,8 @@ import os
 import pathlib
 import logging
 import random
+from functools import wraps
+
 import numpy as np
 import torch
 
@@ -83,8 +85,29 @@ class DistributedTrainer(ABC):
         - self.valid_loader: DataLoader = None
         - self.test_loader: DataLoader = None
 
-    关于分布式方法：
-        TODO：完成文档说明
+    关于分布式的一些注意点：
+        死锁:分布式训练中由于一些方法会阻塞进程，当出现一些进程达到同步点而其他经常因为某些原因，
+        例如条件限制（不要在if中阻塞进程！！！）、进程出错、进程被中断等情况，可能会导致进程无法继续执行，
+        此时达到同步点的进程会被持续阻塞，导致死锁。
+
+        解决方法：
+            1. 避免在 if 等条件语句中阻塞进程，违反了分布式训练的原则（确保所有进程都能达到同步点）。
+            2. 捕获异常并继续raise异常并广播到所有进程，并终止全部进程（就像@safe_process，一个内部装饰器的实现那样做）
+
+        幸运的是，本架构对于每一个epoch执行的任务（running_epoch方法）进行了最外层的异常装饰（@safe_process），
+        这意味着你不用太担心繁琐的try except 语句，只需要你遵循分布式原则并在你的代码中抛出异常即可（不要except异常却不raise异常）。
+        如果我的实现无法满足你的日志记录或其他需求，你可以按照我的实现思路自行实现。
+
+        以下是一些常见的会造成阻塞的分布式方法：
+
+            - dist.barrier()：同步所有进程
+            - dist.reduce()、dist.all_reduce()：数据聚合操作
+            - dist.broadcast()：广播数据（不推荐）
+            - dist.all_gather_object()：收集所有数据后推送到所有进程(推荐) 通常出现在train_epoch中，用于聚合每个进程的损失值（日志记录）
+            - dist.scatter()、dist.gather()：数据分发和收集
+            - dist.send()、dist.recv()：点对点通信
+            - dist.all_to_all()：多对多通信
+            - dist.wait()：等待操作完成
 
     api:
         - self.build_error_msg: 用于构建错误信息，具体请查看方法文档。
@@ -92,6 +115,7 @@ class DistributedTrainer(ABC):
         - self.load_checkpoint: 用于加载检查点，具体请查看方法文档。
         - self.log: 用于打印日志，具体请查看方法文档。
         - self.set_log_: 用于设置日志级别（log内部调用），具体请查看方法文档。
+        - @safe_process: 用于装饰方法，用于捕获异常并广播到所有进程，具体请查看方法文档。
 
     内部所有属性：
         - self.cfg = cfg
@@ -156,6 +180,26 @@ class DistributedTrainer(ABC):
         # self.num_workers = cfg.n_workers_per_gpu
         # self.batch_size = cfg.batch_sz_per_gpu
 
+    def safe_process(func):
+        @wraps(func)
+        def wrapper(self,*args,**kwargs):
+            process_errs = [None]*self.world_size
+            local_err_msg = None
+            try:
+                func(self,*args,**kwargs)
+            except (KeyboardInterrupt,Exception) as e:
+                # 捕获异常，上报并广播至所有进程
+                local_err_msg = self.build_error_msg(e=e,*args,**kwargs)
+            finally:
+                dist.all_gather_object(process_errs,local_err_msg)# 阻塞并广播本地情况到所有进程
+                for err in process_errs:
+                    if err is not None:
+                        self.log(str(err))
+                        raise Exception(err)
+                dist.barrier()
+        return wrapper
+
+    @safe_process
     def running_epoch(self,epoch:int):
         if self.run_mode == 'train-valid':
             self.train_epoch(epoch)
@@ -176,22 +220,7 @@ class DistributedTrainer(ABC):
             raise RuntimeError("需在 with 语句中使用 DistributedTrainer。")
 
         for epoch in range(self.cfg.n_epochs):
-            epoch_errs = [None]*self.world_size
-            local_err_msg = None
-            try:
-                self.running_epoch(epoch)
-            except (KeyboardInterrupt,Exception) as e:
-                # 捕获异常，上报并广播至所有进程
-                local_err_msg = self.build_error_msg(epoch, e)
-            finally:
-                dist.all_gather_object(epoch_errs,local_err_msg)# 阻塞并广播本地情况到所有进程
-                for err in epoch_errs:
-                    if err is not None:
-                        self.log(str(err))
-                        raise Exception(err)
-                dist.barrier()
-                if self.rank == 0 and self.train_loader and self.cfg.auto_save_checkpoint:
-                    self.log(f"[Checkpoint] Saved to {self.save_checkpoint(epoch)}")
+            self.running_epoch(epoch)
 
     def build_error_msg(self,epoch:int,e:BaseException)->str:
         """
@@ -431,7 +460,7 @@ class DistributedTrainer(ABC):
         level: Literal['info', 'warning', 'error'] = 'info'
     ):
         """
-        打印日志，支持 wandb（当 cfg.WANDB_KEY 不为 None）以及本地日志记录。
+        打印日志（rank==0），支持 wandb（当 cfg.WANDB_KEY 不为 None）以及本地日志记录。
         :param msg: str
             日志信息
         :param metrics: Dict[str, Any]
@@ -478,16 +507,39 @@ class DistributedTrainer(ABC):
     @abstractmethod
     def train_epoch(self, epoch):
         """
-        记得在train_epoch中调用self.log()方法，将训练结果记录到日志中
-        train_progress_bar =tqdm(
-            self.train_loader,
-            desc=f"Train Epoch {epoch + 1}/{self.cfg.n_epochs}",
-            disable=(self.rank != 0),
-        )
-        for i,batch in enumerate(train_progress_bar):
-            if self.cfg.demo:
-                break
-        :param epoch:
+        ```python
+        model.train()
+        if hasattr(train_loader.sampler, 'set_epoch'):
+            train_sampler.set_epoch(epoch)  # Ensure shuffling is done correctly
+
+        running_loss = 0.0
+        optimizer.zero_grad()  # Zero gradients before each epoch
+
+        for batch_idx, (inputs, labels) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")):
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            with autocast():  # Automatic Mixed Precision (AMP)
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+
+            # Scale the loss and backward
+            scaler.scale(loss).backward()
+
+            # Perform gradient accumulation
+            if (batch_idx + 1) % accumulation_steps == 0:
+                # Step the optimizer only after accumulation_steps
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+                scheduler.step()  # Update the learning rate （α）
+
+            running_loss += loss.item()
+
+        # After each epoch, print average loss and do validation
+        print(f"Rank {rank}, Epoch [{epoch+1}/{epochs}], Loss: {running_loss / len(train_loader):.4f}")
+
+        ```
+        :param epoch:int
         :return:
         """
         pass
