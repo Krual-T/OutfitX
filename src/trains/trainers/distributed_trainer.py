@@ -81,9 +81,9 @@ class DistributedTrainer(ABC):
         - 如果您有特殊的日志需求，建议自行重写 setup_logger 和 log 方法（但不推荐）。
 
     强制要求定义的几个 DataLoader 名称，请在 setup_dataloaders 中初始化（直接注册到 self 中，而非返回）：
-        - self.train_loader: DataLoader = None
-        - self.valid_loader: DataLoader = None
-        - self.test_loader: DataLoader = None
+        - self.train_dataloader: DataLoader = None
+        - self.valid_dataloader: DataLoader = None
+        - self.test_dataloader: DataLoader = None
 
     关于分布式的一些注意点：
         死锁:分布式训练中由于一些方法会阻塞进程，当出现一些进程达到同步点而其他经常因为某些原因，
@@ -130,9 +130,9 @@ class DistributedTrainer(ABC):
         - self.logger = None
         - self.wandb_run = None
         - self._entered = False
-        - self.train_loader: DataLoader = None
-        - self.valid_loader: DataLoader = None
-        - self.test_loader: DataLoader = None
+        - self.train_dataloader: DataLoader = None
+        - self.valid_dataloader: DataLoader = None
+        - self.test_dataloader: DataLoader = None
 
     内部所有方法：
         - setup_logger: 设置日志记录
@@ -174,9 +174,9 @@ class DistributedTrainer(ABC):
         self.logger = None
         self.wandb_run = None
         self._entered = False
-        self.train_loader:DataLoader = None
-        self.valid_loader:DataLoader = None
-        self.test_loader:DataLoader = None
+        self.train_dataloader:DataLoader = None
+        self.valid_dataloader:DataLoader = None
+        self.test_dataloader:DataLoader = None
         # self.num_workers = cfg.n_workers_per_gpu
         # self.batch_size = cfg.batch_sz_per_gpu
 
@@ -333,6 +333,8 @@ class DistributedTrainer(ABC):
             self.optimizer = self.load_optimizer()
             if self.optimizer is not None:
                 setup_completed("optimizer")
+            elif self.run_mode == 'train-valid':
+                raise ValueError("In the train-valid mode,the fn: load_optimizer() must return an optimizer")
             else:
                 not_setup("optimizer")
         except Exception as e:
@@ -343,6 +345,8 @@ class DistributedTrainer(ABC):
             self.scheduler = self.load_scheduler()
             if self.scheduler is not None:
                 setup_completed("scheduler")
+            elif self.run_mode == 'train-valid':
+                raise ValueError("In the train-valid mode,the fn: load_scheduler() must return a scheduler")
             else:
                 not_setup("scheduler")
         except Exception as e:
@@ -362,27 +366,31 @@ class DistributedTrainer(ABC):
         try:
             self.setup_dataloaders()
             not_setup_sampler = lambda loader: self.log(f"{loader}初始化完成,但{loader}.sampler 未初始化", level="warning")
-
-            if self.train_loader is None:
-                not_setup("train_loader")
-            elif self.train_loader.sampler is None:
-                not_setup_sampler("train_loader")
-            else:
-                setup_completed("train_loader")
-
-            if self.valid_loader is None:
-                not_setup("valid_loader")
-            elif self.valid_loader.sampler is None:
-                not_setup_sampler("valid_loader")
-            else:
-                setup_completed("valid_loader")
-
-            if self.test_loader is None:
-                not_setup("test_loader")
-            elif self.test_loader.sampler is None:
-                not_setup_sampler("test_loader")
-            else:
-                setup_completed("test_loader")
+            # train-valid mode
+            if self.run_mode == 'train-valid':
+                # train_dataloader
+                if self.train_dataloader is None:
+                    raise ValueError("In the train-valid mode,the fn: setup_dataloaders() must Register and initialize self.train_dataloader")
+                elif self.train_dataloader.sampler is None:
+                    not_setup_sampler("train_dataloader")
+                else:
+                    setup_completed("train_dataloader")
+                # valid_dataloader
+                if self.valid_dataloader is None:
+                    raise ValueError("In the train-valid mode,the fn: setup_dataloaders() must Register and initialize self.valid_dataloader")
+                elif self.valid_dataloader.sampler is None:
+                    not_setup_sampler("valid_dataloader")
+                else:
+                    setup_completed("valid_dataloader")
+            # test mode
+            elif self.run_mode == 'test':
+                # test_dataloader
+                if self.test_dataloader is None:
+                    raise ValueError("In the test mode,the fn: setup_dataloaders() must Register and initialize self.test_dataloader")
+                elif self.test_dataloader.sampler is None:
+                    not_setup_sampler("test_dataloader")
+                else:
+                    setup_completed("test_dataloader")
 
         except Exception as e:
             setup_failed("data_loaders")
@@ -404,7 +412,7 @@ class DistributedTrainer(ABC):
         """
         checkpoint_dir = self.cfg.checkpoint_dir
         os.makedirs(checkpoint_dir, exist_ok=True)
-        checkpoint_path = os.path.join(checkpoint_dir, f'epoch_{epoch}.pth')
+        checkpoint_path = checkpoint_dir / f"epoch_{epoch}.pth"
         torch.save({
             'epoch': epoch,
             'config': self.model.module.cfg.__dict__,
@@ -509,13 +517,13 @@ class DistributedTrainer(ABC):
         """
         ```python
         model.train()
-        if hasattr(train_loader.sampler, 'set_epoch'):
+        if hasattr(train_dataloader.sampler, 'set_epoch'):
             train_sampler.set_epoch(epoch)  # Ensure shuffling is done correctly
 
         running_loss = 0.0
         optimizer.zero_grad()  # Zero gradients before each epoch
 
-        for batch_idx, (inputs, labels) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")):
+        for batch_idx, (inputs, labels) in enumerate(tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{epochs}")):
             inputs, labels = inputs.to(device), labels.to(device)
 
             with autocast():  # Automatic Mixed Precision (AMP)
@@ -536,7 +544,7 @@ class DistributedTrainer(ABC):
             running_loss += loss.item()
 
         # After each epoch, print average loss and do validation
-        print(f"Rank {rank}, Epoch [{epoch+1}/{epochs}], Loss: {running_loss / len(train_loader):.4f}")
+        print(f"Rank {rank}, Epoch [{epoch+1}/{epochs}], Loss: {running_loss / len(train_dataloader):.4f}")
 
         ```
         :param epoch:int
@@ -590,7 +598,7 @@ class DistributedTrainer(ABC):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         dist.barrier()  # 确保所有进程都到达此处
-        if not exc_type and self.rank==0 and self.train_loader is not None and self.cfg.auto_save_checkpoint:
+        if not exc_type and self.rank==0 and self.train_dataloader is not None and self.cfg.auto_save_checkpoint:
             self.log(f"[Checkpoint] Saved to {self.save_checkpoint(-1)}")
 
         if self.wandb_run is not None and self.rank == 0:
