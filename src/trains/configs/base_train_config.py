@@ -3,7 +3,7 @@ import torch
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal, Optional,Type
 
 PROJECT_NAME = '基于CNN-Transformer跨模态融合的穿搭推荐模型研究'
 ROOT_DIR = pathlib.Path(__file__).parent.parent.parent.parent.absolute()
@@ -50,9 +50,9 @@ class BaseTrainConfig(ABC):
     demo: bool = False
 
     def __post_init__(self):
-        self.dataset_dir = ROOT_DIR / 'datasets' / self.dataset_name
-        self.checkpoint_dir = ROOT_DIR / 'checkpoints' / self.project_name
-        self.precomputed_embedding_dir = self.dataset_dir / 'precomputed_embeddings'
+        self.dataset_dir:Type[pathlib.Path] = ROOT_DIR / 'datasets' / self.dataset_name
+        self.checkpoint_dir:Type[pathlib.Path] = ROOT_DIR / 'checkpoints' / self.project_name
+        self.precomputed_embedding_dir:Type[pathlib.Path] = self.dataset_dir / 'precomputed_embeddings'
         if self.world_size == -1:
             self.world_size = torch.cuda.device_count()
 
