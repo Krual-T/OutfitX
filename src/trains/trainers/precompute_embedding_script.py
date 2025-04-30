@@ -52,7 +52,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
     def load_scaler(self):
         pass
 
-    def loss(self):
+    def load_loss(self):
         pass
 
     def train_epoch(self, epoch):
