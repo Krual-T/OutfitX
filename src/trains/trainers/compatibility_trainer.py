@@ -126,8 +126,10 @@ class CompatibilityTrainer(DistributedTrainer):
         self.model.train()
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
-
+        train_dataloader = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
+        for batch_idx,(queries, labels) in enumerate(train_dataloader):
+            pass
 
     def valid_epoch(self):
         pass
