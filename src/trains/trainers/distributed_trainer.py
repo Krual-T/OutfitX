@@ -168,15 +168,16 @@ class DistributedTrainer(ABC):
 
 
         self.model :nn.Module = None
-        self.optimizer = None
-        self.scheduler = None
-        self.scaler = None
+        self.optimizer:torch.optim.Optimizer = None
+        self.scheduler:torch.optim.lr_scheduler.LRScheduler = None
+        self.scaler:torch.amp.GradScaler = None
         self.logger = None
         self.wandb_run = None
         self._entered = False
         self.train_dataloader:DataLoader = None
         self.valid_dataloader:DataLoader = None
         self.test_dataloader:DataLoader = None
+        self.loss = None
         # self.num_workers = cfg.n_workers_per_gpu
         # self.batch_size = cfg.batch_sz_per_gpu
 
@@ -328,6 +329,18 @@ class DistributedTrainer(ABC):
         except Exception as e:
             setup_failed("model")
             raise e
+        # 初始化loss
+        try:
+            self.self.load_loss()
+            if self.loss is not None:
+                setup_completed("loss")
+            elif self.run_mode == 'train-valid':
+                raise ValueError("In the train-valid mode,the fn: load_loss() must return a loss(nn.moudle)")
+            elif self.run_mode == 'custom':
+                not_setup("loss")
+        except Exception as e:
+            setup_failed("loss")
+            raise e
         # 初始化优化器
         try:
             self.optimizer = self.load_optimizer()
@@ -335,7 +348,7 @@ class DistributedTrainer(ABC):
                 setup_completed("optimizer")
             elif self.run_mode == 'train-valid':
                 raise ValueError("In the train-valid mode,the fn: load_optimizer() must return an optimizer")
-            else:
+            elif self.run_mode == 'custom':
                 not_setup("optimizer")
         except Exception as e:
             setup_failed("optimizer")
@@ -347,7 +360,7 @@ class DistributedTrainer(ABC):
                 setup_completed("scheduler")
             elif self.run_mode == 'train-valid':
                 raise ValueError("In the train-valid mode,the fn: load_scheduler() must return a scheduler")
-            else:
+            elif self.run_mode == 'custom':
                 not_setup("scheduler")
         except Exception as e:
             setup_failed("scheduler")
@@ -357,7 +370,7 @@ class DistributedTrainer(ABC):
             self.scaler = self.load_scaler()
             if self.scaler is not None:
                 setup_completed("scaler")
-            else:
+            elif self.run_mode != 'test':
                 not_setup("scaler")
         except Exception as e:
             setup_failed("scaler")
@@ -509,7 +522,7 @@ class DistributedTrainer(ABC):
         pass
 
     @abstractmethod
-    def loss(self):
+    def load_loss(self):
         pass
 
     @abstractmethod
@@ -592,6 +605,10 @@ class DistributedTrainer(ABC):
         self.local_rank = int(os.environ["LOCAL_RANK"])
         self.rank = int(os.environ["RANK"])
         self.world_size = int(os.environ["WORLD_SIZE"])
+        self.cfg.n_workers_per_gpu = min(
+            self.cfg.n_workers_per_gpu,
+            max(1, (os.cpu_count() // max(1,torch.cuda.device_count()))-1)
+        )
         self.setup()
 
         return self
