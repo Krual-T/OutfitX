@@ -1,4 +1,5 @@
 import json
+import pathlib
 
 from PIL import Image
 from torch.utils.data import Dataset
@@ -15,13 +16,7 @@ class PolyvoreItemDataset(Dataset):
             load_image: bool = False
     ):
         self.dataset_dir = dataset_dir
-        if metadata is None:
-            metadata_path = dataset_dir / 'item_metadata.json'
-            with open(metadata_path) as f:
-                metadata_original = json.load(f)
-            self.metadata = {item['item_id']: item for item in metadata_original}
-        else:
-            self.metadata = metadata
+        self.metadata = self.load_metadata() if metadata is None else metadata
         self.load_image = load_image
         self.embedding_dict = embedding_dict
         self.all_item_ids = list(self.metadata.keys())
@@ -33,6 +28,12 @@ class PolyvoreItemDataset(Dataset):
         item_id = self.all_item_ids[idx]
         return self.get_item(item_id)
 
+    @staticmethod
+    def load_metadata(self):
+        metadata_path = self.dataset_dir / 'item_metadata.json'
+        with open(metadata_path) as f:
+            metadata_original = json.load(f)
+        return {item['item_id']: item for item in metadata_original}
 
     def get_item(self, item_id) -> FashionItem:
         """
