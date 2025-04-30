@@ -8,5 +8,11 @@ from .base_train_config import BaseTrainConfig
 class CompatibilityTrainConfig(BaseTrainConfig):
     find_unused_parameters = True
     batch_sz_per_gpu: int = 512
+    num_workers: int = 4
+    polyvore_type: Literal['nondisjoint', 'disjoint'] = 'nondisjoint'
     name: str = 'compatibility_train'
     auto_save_checkpoint: bool = True
+    load_image: bool = False
+    learning_rate: float = 2e-5 # learning rate
+    n_epochs: int = 200
+    accumulation_steps: int = 4
