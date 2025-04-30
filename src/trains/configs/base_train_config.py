@@ -25,7 +25,7 @@ class BaseTrainConfig(ABC):
 
     # 训练配置
     n_epochs: int = 200
-    lr: float = 2e-5
+    learning_rate: float = 2e-5
     checkpoint: str = None
     accumulation_steps: int = 4
     seed: int = 42
