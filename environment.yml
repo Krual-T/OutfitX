@@ -18,3 +18,4 @@ dependencies:
     - gradio
     - opencv-python
     - gdown
+    - torchmetrics
