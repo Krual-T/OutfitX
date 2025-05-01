@@ -52,6 +52,11 @@ class CLIPImageEncoder(BaseImageEncoder):
         processor_kargs['return_tensors'] = 'pt'
 
         # 对图像进行预处理
+        # CLIPImageProcessor:
+        # ImageInput = Union[
+        #     "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List[
+        #         "torch.Tensor"]
+        # ]
         transformed_images = self.processor(
             images=images, **processor_kargs
         ).to(self.device)

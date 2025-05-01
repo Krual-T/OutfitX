@@ -178,7 +178,8 @@ class OutfitTransformer(nn.Module):
         max_length = self._get_max_length(queries)
         # batch_size = len(queries)
 
-        outfits = self._get_outfits(queries)
+        outfits = [query.outfit for query in queries]
+
         if use_precomputed_embedding:
             embeddings = self._pad_sequences(
                 sequences=[[item.embedding for item in outfit] for outfit in outfits],
@@ -189,18 +190,12 @@ class OutfitTransformer(nn.Module):
         else:
             # 对outfit进行填充
             images = self._pad_sequences(
-                sequences=[
-                    [item.image for item in outfit]
-                    for outfit in outfits
-                ],
+                sequences=[[item.image for item in outfit]for outfit in outfits],
                 max_length=max_length,
                 pad_value=self.image_pad
             )
             texts = self._pad_sequences(
-                sequences=[
-                    [f"{item.description}"for item in outfit]
-                    for outfit in outfits
-                ],
+                sequences=[[f"{item.description}"for item in outfit]for outfit in outfits],
                 max_length=max_length,
                 pad_value=self.text_pad
             )
@@ -217,15 +212,6 @@ class OutfitTransformer(nn.Module):
             device=self.device
         )
         return embeddings,mask
-
-
-    def _get_outfits(self,
-        queries:List[Union[
-            OutfitCompatibilityPredictionTask,
-            OutfitComplementaryItemRetrievalTask,
-        ]]
-    )->List[List[FashionItem]]:
-        return [query.outfit for query in queries]
 
     def _get_max_length(self, sequences):
         """

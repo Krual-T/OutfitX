@@ -166,7 +166,6 @@ class DistributedTrainer(ABC):
         self.rank = None
         self.world_size = None
 
-
         self.model :nn.Module = None
         self.optimizer:torch.optim.Optimizer = None
         self.scheduler:torch.optim.lr_scheduler.LRScheduler = None
@@ -408,6 +407,9 @@ class DistributedTrainer(ABC):
         except Exception as e:
             setup_failed("data_loaders")
             raise e
+
+    def hook_after_setup(self):
+        pass
 
     def save_checkpoint(self, epoch):
         """

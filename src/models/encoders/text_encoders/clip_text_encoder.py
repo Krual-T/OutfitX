@@ -45,11 +45,10 @@ class CLIPTextEncoder(BaseTextEncoder):
             'truncation': True,
         }
         tokenizer_kargs['return_tensors'] = 'pt'
-
         inputs = self.tokenizer(
             text=texts, **tokenizer_kargs
         )
-
+        # {input_ids: torch.Tensor, attention_mask: torch.Tensor}
         inputs = {
             key: value.to(self.device) for key, value in inputs.items()
         }

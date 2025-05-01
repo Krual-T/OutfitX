@@ -21,12 +21,12 @@ class FocalLoss(nn.Module):
         self.reduction = reduction
 
     def forward(
-        self, y_prob: torch.Tensor, y_true: torch.Tensor,is_logits = True
+        self, y_hat: torch.Tensor, y_true: torch.Tensor,is_logits = True
     ) -> torch.Tensor:
         cross_entropy = F.binary_cross_entropy_with_logits if is_logits else F.binary_cross_entropy
-        ce_loss = cross_entropy(y_prob, y_true, reduction="none")
+        ce_loss = cross_entropy(y_hat, y_true, reduction="none")
 
-        p_t = y_prob * y_true + (1 - y_prob) * (1 - y_true)
+        p_t = y_hat * y_true + (1 - y_hat) * (1 - y_true)
         loss = ce_loss * ((1 - p_t) ** self.gamma)
 
         if self.alpha >= 0:
