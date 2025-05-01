@@ -5,24 +5,41 @@ from typing import Optional
 import numpy as np
 import torch
 from torch import nn
+from torch.cpu.amp import autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.utils.data.distributed import DistributedSampler
-
+from torch import distributed as dist
 from src.losses import FocalLoss
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
 from src.trains.configs.compatibility_train_config import CompatibilityTrainConfig
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityDataset
 from src.trains.trainers.distributed_trainer import DistributedTrainer
-
+from torchmetrics.classification import (
+    BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryF1Score, BinaryAccuracy
+)
 class CompatibilityTrainer(DistributedTrainer):
 
     def __init__(self,cfg:Optional[CompatibilityTrainConfig]=None):
         if cfg is None:
             cfg = CompatibilityTrainConfig()
         super().__init__(cfg=cfg)
-        self.loss = FocalLoss()
+        self.loss:FocalLoss = None
+        # 所有指标提前初始化一次，可以放在模型或 Trainer 中复用
+        self.auroc_metric:BinaryAUROC = None
+        self.precision_metric:BinaryPrecision = None
+        self.recall_metric:BinaryRecall = None
+        self.f1_metric:BinaryF1Score = None
+        self.accuracy_metric:BinaryAccuracy = None
+
+    def hook_after_setup(self):
+        # 所有指标提前初始化一次，可以放在模型或 Trainer 中复用
+        self.auroc_metric = BinaryAUROC().to(self.local_rank)  # 或 device
+        self.precision_metric = BinaryPrecision().to(self.local_rank)
+        self.recall_metric = BinaryRecall().to(self.local_rank)
+        self.f1_metric = BinaryF1Score().to(self.local_rank)
+        self.accuracy_metric = BinaryAccuracy().to(self.local_rank)
 
     def load_model(self) -> nn.Module:
         cfg = OutfitTransformerConfig()
@@ -126,10 +143,84 @@ class CompatibilityTrainer(DistributedTrainer):
         self.model.train()
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
-        train_dataloader = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
+        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
-        for batch_idx,(queries, labels) in enumerate(train_dataloader):
-            pass
+        all_loss = torch.zeros(1,device=self.local_rank,dtype=torch.float32)
+        all_y_hats = torch.zeros(1,device=self.local_rank,dtype=torch.float32)
+        all_labels = torch.zeros(1,device=self.local_rank,dtype=torch.float32)
+        for step,(queries, labels) in enumerate(train_processor):
+            labels = torch.tensor(
+                data=labels,
+                dtype=torch.float32,
+                device=self.local_rank
+            )
+
+            with autocast(enabled=self.cfg.use_amp):
+                y_hats = self.model(queries)
+                loss = self.loss(y_hat=y_hats, y_true=labels)
+                original_loss = loss.detach()
+                loss = loss / self.cfg.accumulation_steps
+
+            self.scaler.scale(loss).backward()
+            self.scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
+            if (step + 1) % self.cfg.accumulation_steps == 0:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
+                self.scheduler.step()
+            metrics = self.compute_cp_metrics(y_hats=y_hats.detach(), labels=labels.detach())
+            logs = {
+                'loss': original_loss.item(),
+                'step': epoch * len(self.train_dataloader) + step,
+                'lr': self.scheduler.get_last_lr()[0],
+                **metrics
+            }
+            logs = {f'train_{k}': v for k, v in logs.items()}
+            self.log(
+                level='info',
+                msg=str(logs),
+                metrics=metrics
+            )
+            train_processor.set_postfix(**logs)
+
+            all_loss += original_loss.item()
+            all_y_hats = torch.stack([all_y_hats,y_hats.detach()])
+            all_labels = torch.stack([all_labels,labels.detach()])
+
+        dist.all_reduce(all_loss, op=dist.ReduceOp.SUM)
+
+
+    def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
+
+        # 确保输入在同一个设备上
+        y_hats = y_hats.to(self.local_rank)
+        labels = labels.to(self.local_rank)
+
+        # AUC 需要概率
+        auc = self.auroc_metric(y_hats, labels)
+
+        # 其他指标需要离散分类
+        pred_labels = (y_hats > 0.5).int()
+
+        # Precision, Recall, F1, Accuracy
+        precision = self.precision_metric(pred_labels, labels)
+        recall = self.recall_metric(pred_labels, labels)
+        f1 = self.f1_metric(pred_labels, labels)
+        accuracy = self.accuracy_metric(pred_labels, labels)
+
+        # 转为 Python float 方便日志或 JSON 输出
+        return {
+            'acc': float(accuracy),
+            'precision': float(precision),
+            'recall': float(recall),
+            'f1': float(f1),
+            'auc': float(auc)
+        }
+
+
+
 
     def valid_epoch(self):
         pass
