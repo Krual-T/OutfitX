@@ -38,7 +38,7 @@ class FocalLoss(nn.Module):
         elif self.reduction == "sum":
             return loss.sum()
         elif self.reduction == "mean":
-            return loss.sum() / torch.tensor(loss.numel(), device=loss.device)  # DDP safe
+            return loss.mean()  # DDP safe
 
 
 def safe_divide(a, b, eps=1e-7):
