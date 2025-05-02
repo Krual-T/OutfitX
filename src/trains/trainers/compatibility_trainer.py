@@ -13,6 +13,7 @@ from torch import distributed as dist
 from src.losses import FocalLoss
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
+from src.models.utils.model_utils import flatten_seq_to_one_dim
 from src.trains.configs.compatibility_train_config import CompatibilityTrainConfig
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityDataset
 from src.trains.trainers.distributed_trainer import DistributedTrainer
@@ -145,9 +146,9 @@ class CompatibilityTrainer(DistributedTrainer):
             self.train_dataloader.sampler.set_epoch(epoch)
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
-        all_loss = torch.zeros(1,device=self.local_rank,dtype=torch.float32)
-        all_y_hats = torch.zeros(1,device=self.local_rank,dtype=torch.float32)
-        all_labels = torch.zeros(1,device=self.local_rank,dtype=torch.float32)
+        local_total_loss = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
+        local_y_hats = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
+        local_labels = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
         for step,(queries, labels) in enumerate(train_processor):
             labels = torch.tensor(
                 data=labels,
@@ -170,11 +171,27 @@ class CompatibilityTrainer(DistributedTrainer):
                 self.scaler.update()
                 self.optimizer.zero_grad()
                 self.scheduler.step()
-            metrics = self.compute_cp_metrics(y_hats=y_hats.detach(), labels=labels.detach())
+            #  TODO try-catch包裹放到finally中确保不产生死锁
+            dist.barrier()
+            local_step_y_hats = y_hats.detach()
+            local_step_labels = labels.detach()
+            local_step_loss = original_loss
+            all_step_y_hats = [None]*self.world_size
+            all_step_labels = [None]*self.world_size
+            all_step_loss = [None]*self.world_size
+            dist.barrier()
+            dist.all_gather_object(all_step_y_hats, local_step_y_hats)
+            dist.all_gather_object(all_step_labels, local_step_labels)
+            dist.all_gather_object(all_step_loss, local_step_loss)
+            flatten_seq_to_one_dim(all_step_y_hats)
+            flatten_seq_to_one_dim(all_step_labels)
+            # TODO 记录全局batch的指标
+            metrics = self.compute_cp_metrics(y_hats=all_step_y_hats, labels=all_step_labels) # 全局batch的指标
             logs = {
-                'loss': original_loss.item(),
+                'loss': sum(all_step_loss) / self.world_size,
                 'step': epoch * len(self.train_dataloader) + step,
                 'lr': self.scheduler.get_last_lr()[0],
+
                 **metrics
             }
             logs = {f'train_{k}': v for k, v in logs.items()}
@@ -185,11 +202,23 @@ class CompatibilityTrainer(DistributedTrainer):
             )
             train_processor.set_postfix(**logs)
 
-            all_loss += original_loss.item()
-            all_y_hats = torch.stack([all_y_hats,y_hats.detach()])
-            all_labels = torch.stack([all_labels,labels.detach()])
+            local_total_loss += original_loss
+            local_y_hats = torch.cat([local_y_hats, y_hats.detach()], dim=0)
+            local_labels = torch.cat([local_labels, labels.detach()], dim=0)
 
-        dist.all_reduce(all_loss, op=dist.ReduceOp.SUM)
+        all_y_hats = [None]*self.world_size
+        all_labels = [None]*self.world_size
+        all_total_loss = [None]*self.world_size
+        dist.barrier()
+        dist.all_gather_object(all_y_hats, local_y_hats)
+        dist.all_gather_object(all_labels, local_labels)
+        dist.all_gather_object(all_total_loss, local_total_loss)
+        # len(self.train_dataloader) 只是当前进程的 batch 数量，需要乘以 world_size
+        total_loss = sum(all_total_loss) / (len(self.train_dataloader) * self.world_size)
+
+        dist.barrier()
+        # TODO 记录全局epoch的指标
+
 
 
     def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
