@@ -1,9 +1,10 @@
 import os
 import pickle
-from typing import Optional
+from typing import Optional, Literal
 
 import numpy as np
 import torch
+from sentry_sdk.utils import epoch
 from torch import nn
 from torch.cpu.amp import autocast
 from torch.utils.data import DataLoader
@@ -13,6 +14,7 @@ from torch import distributed as dist
 from src.losses import FocalLoss
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
+from src.models.utils.model_utils import flatten_seq_to_one_dim
 from src.trains.configs.compatibility_train_config import CompatibilityTrainConfig
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityDataset
 from src.trains.trainers.distributed_trainer import DistributedTrainer
@@ -139,16 +141,48 @@ class CompatibilityTrainer(DistributedTrainer):
             collate_fn=collate_fn
         )
 
-    def train_epoch(self, epoch):
+    def build_metrics(
+        self,
+        local_y_hats:torch.Tensor,
+        local_labels:torch.Tensor,
+        local_loss:torch.Tensor,
+        batch_count:int = 1,
+    ):
+        local_y_hats = local_y_hats.detach()
+        local_labels = local_labels.detach()
+        local_loss = local_loss.detach()
+        # 一般不会很大，所以可以直接 gather 到当前进程
+        all_y_hats = [None]*self.world_size
+        all_labels = [None]*self.world_size
+        all_loss = [None]*self.world_size
+
+        dist.all_gather_object(all_y_hats, local_y_hats)
+        dist.all_gather_object(all_labels, local_labels)
+        dist.all_gather_object(all_loss, local_loss)
+
+        all_y_hats = torch.cat(all_y_hats, dim=0)
+        all_labels = torch.cat(all_labels, dim=0)
+        all_loss = torch.cat(all_loss, dim=0).mean()/batch_count
+
+        metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
+        return {
+            'loss': all_loss.item(),
+            **metrics
+        }
+
+
+    def train_epoch(self, epoch:int):
         self.model.train()
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
-        all_loss = torch.zeros(1,device=self.local_rank,dtype=torch.float32)
-        all_y_hats = torch.zeros(1,device=self.local_rank,dtype=torch.float32)
-        all_labels = torch.zeros(1,device=self.local_rank,dtype=torch.float32)
+        local_total_loss = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
+        local_y_hats = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
+        local_labels = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
+        # TODO 记录epoch耗时
         for step,(queries, labels) in enumerate(train_processor):
+            # TODO 记录batch耗时
             labels = torch.tensor(
                 data=labels,
                 dtype=torch.float32,
@@ -170,26 +204,42 @@ class CompatibilityTrainer(DistributedTrainer):
                 self.scaler.update()
                 self.optimizer.zero_grad()
                 self.scheduler.step()
-            metrics = self.compute_cp_metrics(y_hats=y_hats.detach(), labels=labels.detach())
-            logs = {
-                'loss': original_loss.item(),
+            #  TODO try-catch包裹放到finally中确保不产生死锁
+            dist.barrier()
+            metrics = self.build_metrics(
+                    local_y_hats=y_hats.detach(),
+                    local_labels=labels.detach(),
+                    local_loss=original_loss.detach(),
+            )
+            metrics = {
                 'step': epoch * len(self.train_dataloader) + step,
-                'lr': self.scheduler.get_last_lr()[0],
+                'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
                 **metrics
             }
-            logs = {f'train_{k}': v for k, v in logs.items()}
+            metrics = {f'train-batch:{k}': v for k, v in metrics.items()}
             self.log(
                 level='info',
-                msg=str(logs),
+                msg=str(metrics),
                 metrics=metrics
             )
-            train_processor.set_postfix(**logs)
+            train_processor.set_postfix(**metrics)
 
-            all_loss += original_loss.item()
-            all_y_hats = torch.stack([all_y_hats,y_hats.detach()])
-            all_labels = torch.stack([all_labels,labels.detach()])
+            local_total_loss += original_loss
+            local_y_hats = torch.cat([local_y_hats, y_hats.detach()], dim=0)
+            local_labels = torch.cat([local_labels, labels.detach()], dim=0)
 
-        dist.all_reduce(all_loss, op=dist.ReduceOp.SUM)
+        metrics = self.build_metrics(
+            local_y_hats=local_y_hats,
+            local_labels=local_labels,
+            local_loss=local_total_loss,
+        )
+        metrics = {f'train-epoch:{k}': v for k, v in metrics.items()}
+        self.log(
+            level='info',
+            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> End \n {str(metrics)}",
+            metrics=metrics
+        )
+
 
 
     def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
@@ -212,11 +262,11 @@ class CompatibilityTrainer(DistributedTrainer):
 
         # 转为 Python float 方便日志或 JSON 输出
         return {
-            'acc': float(accuracy),
-            'precision': float(precision),
-            'recall': float(recall),
-            'f1': float(f1),
-            'auc': float(auc)
+            'Accuracy': accuracy.item(),
+            'Precision': precision.item(),
+            'Recall': recall.item(),
+            'F1': f1.item(),
+            'AUC': auc.item()
         }
 
 
