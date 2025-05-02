@@ -1,9 +1,10 @@
 import os
 import pickle
-from typing import Optional
+from typing import Optional, Literal
 
 import numpy as np
 import torch
+from sentry_sdk.utils import epoch
 from torch import nn
 from torch.cpu.amp import autocast
 from torch.utils.data import DataLoader
@@ -140,7 +141,37 @@ class CompatibilityTrainer(DistributedTrainer):
             collate_fn=collate_fn
         )
 
-    def train_epoch(self, epoch):
+    def build_metrics(
+        self,
+        local_y_hats:torch.Tensor,
+        local_labels:torch.Tensor,
+        local_loss:torch.Tensor,
+        batch_count:int = 1,
+    ):
+        local_y_hats = local_y_hats.detach()
+        local_labels = local_labels.detach()
+        local_loss = local_loss.detach()
+        # 一般不会很大，所以可以直接 gather 到当前进程
+        all_y_hats = [None]*self.world_size
+        all_labels = [None]*self.world_size
+        all_loss = [None]*self.world_size
+
+        dist.all_gather_object(all_y_hats, local_y_hats)
+        dist.all_gather_object(all_labels, local_labels)
+        dist.all_gather_object(all_loss, local_loss)
+
+        all_y_hats = torch.cat(all_y_hats, dim=0)
+        all_labels = torch.cat(all_labels, dim=0)
+        all_loss = torch.cat(all_loss, dim=0).mean()/batch_count
+
+        metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
+        return {
+            'loss': all_loss.item(),
+            **metrics
+        }
+
+
+    def train_epoch(self, epoch:int):
         self.model.train()
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
@@ -149,7 +180,9 @@ class CompatibilityTrainer(DistributedTrainer):
         local_total_loss = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
         local_y_hats = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
         local_labels = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
+        # TODO 记录epoch耗时
         for step,(queries, labels) in enumerate(train_processor):
+            # TODO 记录batch耗时
             labels = torch.tensor(
                 data=labels,
                 dtype=torch.float32,
@@ -173,51 +206,39 @@ class CompatibilityTrainer(DistributedTrainer):
                 self.scheduler.step()
             #  TODO try-catch包裹放到finally中确保不产生死锁
             dist.barrier()
-            local_step_y_hats = y_hats.detach()
-            local_step_labels = labels.detach()
-            local_step_loss = original_loss
-            all_step_y_hats = [None]*self.world_size
-            all_step_labels = [None]*self.world_size
-            all_step_loss = [None]*self.world_size
-            dist.barrier()
-            dist.all_gather_object(all_step_y_hats, local_step_y_hats)
-            dist.all_gather_object(all_step_labels, local_step_labels)
-            dist.all_gather_object(all_step_loss, local_step_loss)
-            flatten_seq_to_one_dim(all_step_y_hats)
-            flatten_seq_to_one_dim(all_step_labels)
-            # TODO 记录全局batch的指标
-            metrics = self.compute_cp_metrics(y_hats=all_step_y_hats, labels=all_step_labels) # 全局batch的指标
-            logs = {
-                'loss': sum(all_step_loss) / self.world_size,
+            metrics = self.build_metrics(
+                    local_y_hats=y_hats.detach(),
+                    local_labels=labels.detach(),
+                    local_loss=original_loss.detach(),
+            )
+            metrics = {
                 'step': epoch * len(self.train_dataloader) + step,
-                'lr': self.scheduler.get_last_lr()[0],
-
+                'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
                 **metrics
             }
-            logs = {f'train_{k}': v for k, v in logs.items()}
+            metrics = {f'train-batch:{k}': v for k, v in metrics.items()}
             self.log(
                 level='info',
-                msg=str(logs),
+                msg=str(metrics),
                 metrics=metrics
             )
-            train_processor.set_postfix(**logs)
+            train_processor.set_postfix(**metrics)
 
             local_total_loss += original_loss
             local_y_hats = torch.cat([local_y_hats, y_hats.detach()], dim=0)
             local_labels = torch.cat([local_labels, labels.detach()], dim=0)
 
-        all_y_hats = [None]*self.world_size
-        all_labels = [None]*self.world_size
-        all_total_loss = [None]*self.world_size
-        dist.barrier()
-        dist.all_gather_object(all_y_hats, local_y_hats)
-        dist.all_gather_object(all_labels, local_labels)
-        dist.all_gather_object(all_total_loss, local_total_loss)
-        # len(self.train_dataloader) 只是当前进程的 batch 数量，需要乘以 world_size
-        total_loss = sum(all_total_loss) / (len(self.train_dataloader) * self.world_size)
-
-        dist.barrier()
-        # TODO 记录全局epoch的指标
+        metrics = self.build_metrics(
+            local_y_hats=local_y_hats,
+            local_labels=local_labels,
+            local_loss=local_total_loss,
+        )
+        metrics = {f'train-epoch:{k}': v for k, v in metrics.items()}
+        self.log(
+            level='info',
+            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> End \n {str(metrics)}",
+            metrics=metrics
+        )
 
 
 
@@ -241,11 +262,11 @@ class CompatibilityTrainer(DistributedTrainer):
 
         # 转为 Python float 方便日志或 JSON 输出
         return {
-            'acc': float(accuracy),
-            'precision': float(precision),
-            'recall': float(recall),
-            'f1': float(f1),
-            'auc': float(auc)
+            'Accuracy': accuracy.item(),
+            'Precision': precision.item(),
+            'Recall': recall.item(),
+            'F1': f1.item(),
+            'AUC': auc.item()
         }
 
 
