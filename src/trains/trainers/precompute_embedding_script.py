@@ -90,6 +90,3 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
 
         self.log(f"[Rank {self.rank}] 预计算完成！共保存{len(all_ids)}个物品到 {save_path}")
 
-if __name__ == '__main__':
-    with PrecomputeEmbeddingScript() as PES:
-        PES.run()
