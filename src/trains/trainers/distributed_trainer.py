@@ -2,6 +2,7 @@ import os
 import pathlib
 import logging
 import random
+from contextlib import contextmanager
 from functools import wraps
 
 import numpy as np
@@ -198,6 +199,25 @@ class DistributedTrainer(ABC):
                         raise Exception(err)
                 dist.barrier()
         return wrapper
+
+    @contextmanager
+    def safe_process_context(self,*args,**kwargs):
+        process_errs = [None] * self.world_size
+        local_err_msg = None
+        try:
+            yield
+        except (KeyboardInterrupt, Exception) as e:
+            # 捕获异常，上报并广播至所有进程
+            local_err_msg = self.build_error_msg(e=e, *args, **kwargs)
+        finally:
+            dist.all_gather_object(process_errs, local_err_msg)  # 阻塞并广播本地情况到所有进程
+            for err in process_errs:
+                if err is not None:
+                    self.log(str(err))
+                    raise Exception(err)
+            dist.barrier()
+
+
 
     @safe_process
     def running_epoch(self,epoch:int):
