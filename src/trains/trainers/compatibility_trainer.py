@@ -152,13 +152,13 @@ class CompatibilityTrainer(DistributedTrainer):
         local_labels = local_labels.detach()
         local_loss = local_loss.detach()
         # 一般不会很大，所以可以直接 gather 到当前进程
-        all_y_hats = [None]*self.world_size
-        all_labels = [None]*self.world_size
-        all_loss = [None]*self.world_size
-
-        dist.all_gather_object(all_y_hats, local_y_hats)
-        dist.all_gather_object(all_labels, local_labels)
-        dist.all_gather_object(all_loss, local_loss)
+        all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
+        all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
+        all_loss   = [torch.empty_like( local_loss ) for _ in range(self.world_size)]
+        # maybe use all_gather_into_tensor ?
+        dist.all_gather(all_y_hats, local_y_hats)
+        dist.all_gather(all_labels, local_labels)
+        dist.all_gather(all_loss, local_loss)
 
         all_y_hats = torch.cat(all_y_hats, dim=0)
         all_labels = torch.cat(all_labels, dim=0)
@@ -183,28 +183,28 @@ class CompatibilityTrainer(DistributedTrainer):
         # TODO 记录epoch耗时
         for step,(queries, labels) in enumerate(train_processor):
             # TODO 记录batch耗时
-            labels = torch.tensor(
-                data=labels,
-                dtype=torch.float32,
-                device=self.local_rank
-            )
+            with self.safe_process_context(epoch=epoch, step=step):
+                labels = torch.tensor(
+                    data=labels,
+                    dtype=torch.float32,
+                    device=self.local_rank
+                )
 
-            with autocast(enabled=self.cfg.use_amp):
-                y_hats = self.model(queries)
-                loss = self.loss(y_hat=y_hats, y_true=labels)
-                original_loss = loss.detach()
-                loss = loss / self.cfg.accumulation_steps
+                with autocast(enabled=self.cfg.use_amp):
+                    y_hats = self.model(queries)
+                    loss = self.loss(y_hat=y_hats, y_true=labels)
+                    original_loss = loss.detach()
+                    loss = loss / self.cfg.accumulation_steps
 
-            self.scaler.scale(loss).backward()
-            self.scaler.unscale_(self.optimizer)
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                self.scaler.scale(loss).backward()
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
-            if (step + 1) % self.cfg.accumulation_steps == 0:
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-                self.optimizer.zero_grad()
-                self.scheduler.step()
-            #  TODO try-catch包裹放到finally中确保不产生死锁
+                if (step + 1) % self.cfg.accumulation_steps == 0:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad()
+                    self.scheduler.step()
             dist.barrier()
             metrics = self.build_metrics(
                     local_y_hats=y_hats.detach(),
@@ -239,7 +239,6 @@ class CompatibilityTrainer(DistributedTrainer):
             msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> End \n {str(metrics)}",
             metrics=metrics
         )
-
 
 
     def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
