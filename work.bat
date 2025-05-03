@@ -5,12 +5,8 @@ if "%1"=="" (
     exit /b 1
 )
 
-:: Get the current date in the format yyyy-mm-dd
-for /f "tokens=2 delims==" %%I in ('"wmic os get localdatetime /value"') do set datetime=%%I
-set year=%datetime:~0,4%
-set month=%datetime:~4,2%
-set day=%datetime:~6,2%
-set date=%year%-%month%-%day%
+:: Use PowerShell to get the current date in yyyy-MM-dd format
+for /f %%I in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set date=%%I
 
 :: Combine the name and date to create the branch name
 set branchName=%1/%date%
