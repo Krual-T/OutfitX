@@ -1,4 +1,6 @@
 import pathlib
+from pathlib import Path
+
 import torch
 
 from abc import ABC, abstractmethod
@@ -6,7 +8,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional,Type
 
 PROJECT_NAME = '基于CNN-Transformer跨模态融合的穿搭推荐模型研究'
-ROOT_DIR = pathlib.Path(__file__).parent.parent.parent.parent.absolute()
+ROOT_DIR: Path = pathlib.Path(__file__).parent.parent.parent.parent.absolute()
 WANDB_KEY = 'd88f9f90e3e7f7459c00a66f323751a06e87d997'
 
 @dataclass
@@ -37,7 +39,7 @@ class BaseTrainConfig(ABC):
     # 日志配置
     wandb_key: str = WANDB_KEY
     project_name: str = PROJECT_NAME
-    LOG_DIR:Optional[pathlib.Path] = None
+    LOG_DIR:Optional[Path] = ROOT_DIR / 'logs'
     @property
     @abstractmethod
     def auto_save_checkpoint(self) -> bool:
@@ -50,9 +52,9 @@ class BaseTrainConfig(ABC):
     demo: bool = False
 
     def __post_init__(self):
-        self.dataset_dir:Type[pathlib.Path] = ROOT_DIR / 'datasets' / self.dataset_name
-        self.checkpoint_dir:Type[pathlib.Path] = ROOT_DIR / 'checkpoints' / self.project_name
-        self.precomputed_embedding_dir:Type[pathlib.Path] = self.dataset_dir / 'precomputed_embeddings'
+        self.dataset_dir:Path = ROOT_DIR / 'datasets' / self.dataset_name
+        self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.project_name
+        self.precomputed_embedding_dir:Path = self.dataset_dir / 'precomputed_embeddings'
         if self.world_size == -1:
             self.world_size = torch.cuda.device_count()
 

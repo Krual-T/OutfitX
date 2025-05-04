@@ -1,10 +1,10 @@
 import os
 import pickle
-from typing import Optional, Literal
+import time
+from typing import Optional, Literal, cast
 
 import numpy as np
 import torch
-from sentry_sdk.utils import epoch
 from torch import nn
 from torch.cpu.amp import autocast
 from torch.utils.data import DataLoader
@@ -27,6 +27,7 @@ class CompatibilityTrainer(DistributedTrainer):
         if cfg is None:
             cfg = CompatibilityTrainConfig()
         super().__init__(cfg=cfg)
+        self.cfg = cast(CompatibilityTrainConfig,cfg)
         self.loss:FocalLoss = None
         # 所有指标提前初始化一次，可以放在模型或 Trainer 中复用
         self.auroc_metric:BinaryAUROC = None
@@ -96,94 +97,113 @@ class CompatibilityTrainer(DistributedTrainer):
             [item[0] for item in batch],
             [item[1] for item in batch]
         )
-        train_dataset = PolyvoreCompatibilityDataset(
-            polyvore_type=self.cfg.polyvore_type,
-            mode='train',
-            dataset_dir=self.cfg.dataset_dir,
-            embedding_dict=item_embeddings,
-            load_image=self.cfg.load_image
-        )
-        train_sampler = DistributedSampler(
-            dataset=train_dataset,
-            num_replicas=self.world_size,
-            rank=self.rank,
-            shuffle=True,
-            drop_last=True
-        )
-        self.train_dataloader = DataLoader(
-            dataset=train_dataset,
-            batch_size=self.cfg.batch_sz_per_gpu,
-            sampler=train_sampler,
-            num_workers=self.cfg.num_workers,
-            pin_memory=True,
-            collate_fn=collate_fn
-        )
-        valid_dataset = PolyvoreCompatibilityDataset(
-            polyvore_type=self.cfg.polyvore_type,
-            mode='valid',
-            dataset_dir=self.cfg.dataset_dir,
-            embedding_dict=item_embeddings,
-            load_image=self.cfg.load_image
-        )
-        valid_sampler = DistributedSampler(
-            dataset=valid_dataset,
-            num_replicas=self.world_size,
-            rank=self.rank,
-            shuffle=False,
-            drop_last=False
-        )
-        self.valid_dataloader = DataLoader(
-            dataset=valid_dataset,
-            batch_size=self.cfg.batch_sz_per_gpu,
-            sampler=valid_sampler,
-            num_workers=self.cfg.num_workers,
-            pin_memory=True,
-            collate_fn=collate_fn
-        )
+        if self.run_mode == 'train-valid':
+            train_dataset = PolyvoreCompatibilityDataset(
+                polyvore_type=self.cfg.polyvore_type,
+                mode='train',
+                dataset_dir=self.cfg.dataset_dir,
+                embedding_dict=item_embeddings,
+                load_image=self.cfg.load_image
+            )
+            train_sampler = DistributedSampler(
+                dataset=train_dataset,
+                num_replicas=self.world_size,
+                rank=self.rank,
+                shuffle=True,
+                drop_last=True
+            )
+            self.train_dataloader = DataLoader(
+                dataset=train_dataset,
+                batch_size=self.cfg.batch_sz_per_gpu,
+                sampler=train_sampler,
+                num_workers=self.cfg.num_workers,
+                pin_memory=True,
+                collate_fn=collate_fn
+            )
+            valid_dataset = PolyvoreCompatibilityDataset(
+                polyvore_type=self.cfg.polyvore_type,
+                mode='valid',
+                dataset_dir=self.cfg.dataset_dir,
+                embedding_dict=item_embeddings,
+                load_image=self.cfg.load_image
+            )
+            valid_sampler = DistributedSampler(
+                dataset=valid_dataset,
+                num_replicas=self.world_size,
+                rank=self.rank,
+                shuffle=False,
+                drop_last=False
+            )
+            self.valid_dataloader = DataLoader(
+                dataset=valid_dataset,
+                batch_size=self.cfg.batch_sz_per_gpu,
+                sampler=valid_sampler,
+                num_workers=self.cfg.num_workers,
+                pin_memory=True,
+                collate_fn=collate_fn
+            )
+        elif self.run_mode == 'test':
+            test_dataset = PolyvoreCompatibilityDataset(
+                polyvore_type=self.cfg.polyvore_type,
+                mode='test',
+                dataset_dir=self.cfg.dataset_dir,
+                embedding_dict=item_embeddings,
+                load_image=self.cfg.load_image
+            )
 
     def build_metrics(
         self,
         local_y_hats:torch.Tensor,
         local_labels:torch.Tensor,
         local_loss:torch.Tensor,
+        local_time:torch.Tensor,
+        epoch:int,
         batch_count:int = 1,
     ):
-        local_y_hats = local_y_hats.detach()
-        local_labels = local_labels.detach()
-        local_loss = local_loss.detach()
-        # 一般不会很大，所以可以直接 gather 到当前进程
-        all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
-        all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
-        all_loss   = [torch.empty_like( local_loss ) for _ in range(self.world_size)]
+        with self.safe_process_context(epoch=epoch):
+            local_y_hats = local_y_hats.detach()
+            local_labels = local_labels.detach()
+            local_loss = local_loss.detach()
+            # 一般不会很大，所以可以直接 gather 到当前进程
+            all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
+            all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
+            all_loss = [torch.empty_like(local_loss) for _ in range(self.world_size)]
+            all_time = [torch.empty_like(local_time) for _ in range(self.world_size)]
         # maybe use all_gather_into_tensor ?
         dist.all_gather(all_y_hats, local_y_hats)
         dist.all_gather(all_labels, local_labels)
         dist.all_gather(all_loss, local_loss)
+        dist.all_gather(all_time, local_time)
 
         all_y_hats = torch.cat(all_y_hats, dim=0)
         all_labels = torch.cat(all_labels, dim=0)
         all_loss = torch.cat(all_loss, dim=0).mean()/batch_count
+        all_time = torch.cat(all_time, dim=0).mean()
 
         metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
         return {
             'loss': all_loss.item(),
+            'time': all_time.item(),
             **metrics
         }
 
 
-    def train_epoch(self, epoch:int):
+    def train_epoch(self, epoch: int) -> None:
+        # 记录epoch开始时间
+        epoch_start_time = time.time()
+
         self.model.train()
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
-        local_total_loss = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
-        local_y_hats = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
-        local_labels = torch.zeros(1, device=self.local_rank, dtype=torch.float32)
-        # TODO 记录epoch耗时
+        local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
+        local_y_hats = []
+        local_labels = []
         for step,(queries, labels) in enumerate(train_processor):
-            # TODO 记录batch耗时
-            with self.safe_process_context(epoch=epoch, step=step):
+            # 记录每个batch的开始时间
+            batch_start_time = time.time()
+            with self.safe_process_context(epoch=epoch):
                 labels = torch.tensor(
                     data=labels,
                     dtype=torch.float32,
@@ -205,11 +225,16 @@ class CompatibilityTrainer(DistributedTrainer):
                     self.scaler.update()
                     self.optimizer.zero_grad()
                     self.scheduler.step()
+
+                batch_end_time = time.time()
+                local_batch_time = torch.tensor(batch_end_time - batch_start_time, device=self.local_rank, dtype=torch.float32)
             dist.barrier()
             metrics = self.build_metrics(
                     local_y_hats=y_hats.detach(),
                     local_labels=labels.detach(),
-                    local_loss=original_loss.detach(),
+                    local_loss=original_loss,
+                    local_batch_time=local_batch_time,
+                    epoch=epoch,
             )
             metrics = {
                 'step': epoch * len(self.train_dataloader) + step,
@@ -225,13 +250,24 @@ class CompatibilityTrainer(DistributedTrainer):
             train_processor.set_postfix(**metrics)
 
             local_total_loss += original_loss
-            local_y_hats = torch.cat([local_y_hats, y_hats.detach()], dim=0)
-            local_labels = torch.cat([local_labels, labels.detach()], dim=0)
+            local_y_hats.append(y_hats.detach())
+            local_labels.append(labels.detach())
+            # batch end--------------------------------------------------------------------------------------------------------
 
+        local_y_hats = torch.cat(local_y_hats, dim=0)
+        local_labels = torch.cat(local_labels, dim=0)
+        # 记录epoch结束时间
+        epoch_end_time = time.time()
+        dist.barrier()
+
+        # 计算epoch耗时
+        local_epoch_time = torch.tensor(epoch_end_time - epoch_start_time, device=self.local_rank, dtype=torch.float32)
         metrics = self.build_metrics(
             local_y_hats=local_y_hats,
             local_labels=local_labels,
             local_loss=local_total_loss,
+            local_epoch_time=local_epoch_time,
+            batch_count=len(self.train_dataloader)
         )
         metrics = {f'train-epoch:{k}': v for k, v in metrics.items()}
         self.log(
@@ -239,6 +275,7 @@ class CompatibilityTrainer(DistributedTrainer):
             msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> End \n {str(metrics)}",
             metrics=metrics
         )
+        # TODO: 保存模型
 
 
     def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
@@ -270,11 +307,79 @@ class CompatibilityTrainer(DistributedTrainer):
 
 
 
+    @torch.no_grad()
+    def valid_epoch(self, epoch: int):
+        # 记录epoch开始时间
+        epoch_start_time = time.time()
+        self.model.eval()
+        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
+        local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
+        local_y_hats = []
+        local_labels = []
+        for step,(queries, labels) in enumerate(valid_processor):
+            # 记录每个batch的开始时间
+            batch_start_time = time.time()
+            with self.safe_process_context(epoch=epoch):
+                labels = torch.tensor(
+                    data=labels,
+                    dtype=torch.float32,
+                    device=self.local_rank
+                )
+                with autocast(enabled=self.cfg.use_amp):
+                    y_hats = self.model(queries)
+                    loss = self.loss(y_hat=y_hats, y_true=labels)
+                    original_loss = loss.detach()
 
-    def valid_epoch(self):
-        pass
+                batch_end_time = time.time()
+                local_batch_time = torch.tensor(batch_end_time - batch_start_time, device=self.local_rank, dtype=torch.float32)
+            dist.barrier()
+            metrics = self.build_metrics(
+                    local_y_hats=y_hats.detach(),
+                    local_labels=labels.detach(),
+                    local_loss=original_loss,
+                    local_batch_time=local_batch_time,
+                    epoch=epoch,
+            )
+            metrics = {
+                'step': epoch * len(self.train_dataloader) + step,
+                **metrics
+            }
+            metrics = {f'valid-batch:{k}': v for k, v in metrics.items()}
+            self.log(
+                level='info',
+                msg=str(metrics),
+                metrics=metrics
+            )
+            valid_processor.set_postfix(**metrics)
 
-    def test_epoch(self):
+            local_total_loss += original_loss
+            local_y_hats.append(y_hats.detach())
+            local_labels.append(labels.detach())
+            # batch end--------------------------------------------------------------------------------------------------------
+
+        local_y_hats = torch.cat(local_y_hats, dim=0)
+        local_labels = torch.cat(local_labels, dim=0)
+        # 记录epoch结束时间
+        epoch_end_time = time.time()
+        dist.barrier()
+
+        # 计算epoch耗时
+        local_epoch_time = torch.tensor(epoch_end_time - epoch_start_time, device=self.local_rank, dtype=torch.float32)
+        metrics = self.build_metrics(
+            local_y_hats=local_y_hats,
+            local_labels=local_labels,
+            local_loss=local_total_loss,
+            local_epoch_time=local_epoch_time,
+            batch_count=len(self.train_dataloader)
+        )
+        metrics = {f'valid-epoch:{k}': v for k, v in metrics.items()}
+        self.log(
+            level='info',
+            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> End \n {str(metrics)}",
+            metrics=metrics
+        )
+
+    def test(self):
         pass
 
     def custom_task(self, *args, **kwargs):
