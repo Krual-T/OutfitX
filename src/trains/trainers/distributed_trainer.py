@@ -181,25 +181,6 @@ class DistributedTrainer(ABC):
         # self.num_workers = cfg.n_workers_per_gpu
         # self.batch_size = cfg.batch_sz_per_gpu
 
-    def safe_process(func):
-        @wraps(func)
-        def wrapper(self,*args,**kwargs):
-            process_errs = [None]*self.world_size
-            local_err_msg = None
-            try:
-                func(self,*args,**kwargs)
-            except (KeyboardInterrupt,Exception) as e:
-                # 捕获异常，上报并广播至所有进程
-                local_err_msg = self.build_error_msg(e=e,*args,**kwargs)
-            finally:
-                dist.all_gather_object(process_errs,local_err_msg)# 阻塞并广播本地情况到所有进程
-                for err in process_errs:
-                    if err is not None:
-                        self.log(str(err))
-                        raise Exception(err)
-                dist.barrier()
-        return wrapper
-
     @contextmanager
     def safe_process_context(self, *args, **kwargs,):
         process_errs = [None] * self.world_size
@@ -217,19 +198,6 @@ class DistributedTrainer(ABC):
                     raise Exception(err)
             dist.barrier()
 
-
-
-    @safe_process
-    def running_epoch(self,epoch:int):
-        if self.run_mode == 'train-valid':
-            self.train_epoch(epoch)
-            self.valid_epoch()
-        elif self.run_mode == 'test':
-            self.test_epoch()
-        elif self.run_mode == 'custom':
-            # 自定义任务
-            self.custom_task(epoch=epoch)
-
     def run(self):
         """
         运行训练过程，根据 cfg.n_epochs 进行训练迭代。
@@ -238,9 +206,17 @@ class DistributedTrainer(ABC):
         """
         if not self._entered:
             raise RuntimeError("需在 with 语句中使用 DistributedTrainer。")
+        if self.run_mode == 'train-valid':
+            for epoch in range(self.cfg.n_epochs):
+                self.train_epoch(epoch)
+                self.valid_epoch(epoch)
+        elif self.run_mode == 'test':
+            self.test()
+        elif self.run_mode == 'custom':
+            # 自定义任务
+            self.custom_task()
 
-        for epoch in range(self.cfg.n_epochs):
-            self.running_epoch(epoch)
+            # FIXME test and custom task need break
 
     def build_error_msg(self, epoch: int, e: BaseException) -> str:
         """
@@ -588,7 +564,7 @@ class DistributedTrainer(ABC):
         pass
 
     @abstractmethod
-    def valid_epoch(self):
+    def valid_epoch(self, epoch):
         """
         记得在valid_epoch中调用self.log()方法，将验证结果记录到日志中
         :return:
@@ -596,9 +572,9 @@ class DistributedTrainer(ABC):
         pass
 
     @abstractmethod
-    def test_epoch(self):
+    def test(self):
         """
-        记得在test_epoch中调用self.log()方法，将测试结果记录到日志中
+        运行一些测试，例如测试模型性能
         :return:
         """
         pass

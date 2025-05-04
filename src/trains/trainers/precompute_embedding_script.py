@@ -61,7 +61,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
     def valid_epoch(self):
         pass
 
-    def test_epoch(self):
+    def test(self):
         pass
 
     def custom_task(self, *args, **kwargs):
