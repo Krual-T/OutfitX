@@ -201,14 +201,14 @@ class DistributedTrainer(ABC):
         return wrapper
 
     @contextmanager
-    def safe_process_context(self,*args,**kwargs):
+    def safe_process_context(self, *args, **kwargs,):
         process_errs = [None] * self.world_size
         local_err_msg = None
         try:
             yield
         except (KeyboardInterrupt, Exception) as e:
             # 捕获异常，上报并广播至所有进程
-            local_err_msg = self.build_error_msg(e=e, *args, **kwargs)
+            local_err_msg = self.build_error_msg(*args, e=e, **kwargs)
         finally:
             dist.all_gather_object(process_errs, local_err_msg)  # 阻塞并广播本地情况到所有进程
             for err in process_errs:
@@ -242,7 +242,7 @@ class DistributedTrainer(ABC):
         for epoch in range(self.cfg.n_epochs):
             self.running_epoch(epoch)
 
-    def build_error_msg(self,epoch:int,e:BaseException)->str:
+    def build_error_msg(self, epoch: int, e: BaseException) -> str:
         """
         构建错误信息，包含异常类型、异常信息和堆栈跟踪信息。
         :param epoch: 当前 epoch 数
