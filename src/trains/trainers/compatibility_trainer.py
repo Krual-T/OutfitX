@@ -225,7 +225,7 @@ class CompatibilityTrainer(DistributedTrainer):
             dataset=train_dataset,
             batch_size=self.cfg.batch_sz_per_gpu,
             sampler=train_sampler,
-            num_workers=self.cfg.num_workers,
+            num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             collate_fn=collate_fn
         )
@@ -247,7 +247,7 @@ class CompatibilityTrainer(DistributedTrainer):
             dataset=valid_dataset,
             batch_size=self.cfg.batch_sz_per_gpu,
             sampler=valid_sampler,
-            num_workers=self.cfg.num_workers,
+            num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             collate_fn=collate_fn
         )
@@ -264,6 +264,13 @@ class CompatibilityTrainer(DistributedTrainer):
             dataset_dir=self.cfg.dataset_dir,
             embedding_dict=item_embeddings,
             load_image=self.cfg.load_image
+        )
+        self.test_dataloader = DataLoader(
+            dataset=test_dataset,
+            batch_size=self.cfg.batch_sz_per_gpu,
+            shuffle=False,
+            num_workers=self.cfg.dataloader_workers,
+            collate_fn=collate_fn
         )
 
     def hook_after_setup(self):

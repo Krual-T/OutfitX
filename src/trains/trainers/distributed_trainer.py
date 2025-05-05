@@ -182,7 +182,7 @@ class DistributedTrainer(ABC):
         self.valid_dataloader:DataLoader = None
         self.test_dataloader:DataLoader = None
         self.loss = None
-        # self.num_workers = cfg.n_workers_per_gpu
+        # self.dataloader_workers = cfg.dataloader_workers
         # self.batch_size = cfg.batch_sz_per_gpu
 
     @contextmanager
@@ -620,8 +620,8 @@ class DistributedTrainer(ABC):
         self.local_rank = int(os.environ["LOCAL_RANK"])
         self.rank = int(os.environ["RANK"])
         self.world_size = int(os.environ["WORLD_SIZE"])
-        self.cfg.n_workers_per_gpu = min(
-            self.cfg.n_workers_per_gpu,
+        self.cfg.dataloader_workers = min(
+            self.cfg.dataloader_workers,
             max(1, (os.cpu_count() // max(1,torch.cuda.device_count()))-1)
         )
         self.setup()

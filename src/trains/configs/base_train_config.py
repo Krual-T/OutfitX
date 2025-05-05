@@ -16,7 +16,7 @@ class BaseTrainConfig(ABC):
     # 数据集配置
     dataset_name: str = 'polyvore'
     # 分布式配置
-    n_workers_per_gpu: int = 4
+    dataloader_workers: int = 4
     world_size: int = -1
     backend:Literal['nccl', 'gloo']='nccl' if torch.cuda.is_available() else 'gloo'
     @property

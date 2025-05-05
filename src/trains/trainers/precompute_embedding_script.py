@@ -63,7 +63,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
             dataset=item_dataset,
             batch_size=self.cfg.batch_sz_per_gpu,
             sampler=sampler,
-            num_workers=self.cfg.n_workers_per_gpu,
+            num_workers=self.cfg.dataloader_workers,
             collate_fn=collate_fn
         )
 
