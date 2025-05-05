@@ -18,7 +18,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
     def __init__(self,cfg:PrecomputeEmbeddingConfig = None):
         if cfg is None:
             cfg = PrecomputeEmbeddingConfig()
-        super().__init__(cfg=cfg)
+        super().__init__(cfg=cfg, run_mode='custom')
         self.cfg = cfg
         self.item_dataloader = None
 
