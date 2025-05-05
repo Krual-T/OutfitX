@@ -5,10 +5,9 @@ import torch
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal, Optional,Type
+from typing import Literal, Optional
+from src.project_settings.info import PROJECT_NAME, PROJECT_DIR as ROOT_DIR
 
-PROJECT_NAME = '基于CNN-Transformer跨模态融合的穿搭推荐模型研究'
-ROOT_DIR: Path = pathlib.Path(__file__).parent.parent.parent.parent.absolute()
 WANDB_KEY = 'd88f9f90e3e7f7459c00a66f323751a06e87d997'
 
 @dataclass
