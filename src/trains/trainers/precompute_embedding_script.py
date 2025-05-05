@@ -61,7 +61,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         collate_fn = lambda batch: [item for item in batch]
         self.item_dataloader = DataLoader(
             dataset=item_dataset,
-            batch_size=self.cfg.batch_sz_per_gpu,
+            batch_size=self.cfg.batch_size,
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             collate_fn=collate_fn

@@ -7,7 +7,7 @@ from .base_train_config import BaseTrainConfig
 @dataclass
 class CompatibilityTrainConfig(BaseTrainConfig):
     find_unused_parameters = True
-    batch_sz_per_gpu: int = 512
+    batch_size: int = 512
     dataloader_workers: int = 4
     polyvore_type: Literal['nondisjoint', 'disjoint'] = 'nondisjoint'
     name: str = 'compatibility_train'

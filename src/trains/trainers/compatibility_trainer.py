@@ -223,7 +223,7 @@ class CompatibilityTrainer(DistributedTrainer):
         )
         self.train_dataloader = DataLoader(
             dataset=train_dataset,
-            batch_size=self.cfg.batch_sz_per_gpu,
+            batch_size=self.cfg.batch_size,
             sampler=train_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
@@ -245,7 +245,7 @@ class CompatibilityTrainer(DistributedTrainer):
         )
         self.valid_dataloader = DataLoader(
             dataset=valid_dataset,
-            batch_size=self.cfg.batch_sz_per_gpu,
+            batch_size=self.cfg.batch_size,
             sampler=valid_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
@@ -267,7 +267,7 @@ class CompatibilityTrainer(DistributedTrainer):
         )
         self.test_dataloader = DataLoader(
             dataset=test_dataset,
-            batch_size=self.cfg.batch_sz_per_gpu,
+            batch_size=self.cfg.batch_size,
             shuffle=False,
             num_workers=self.cfg.dataloader_workers,
             collate_fn=collate_fn

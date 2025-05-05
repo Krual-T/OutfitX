@@ -21,7 +21,7 @@ class BaseTrainConfig(ABC):
     backend:Literal['nccl', 'gloo']='nccl' if torch.cuda.is_available() else 'gloo'
     @property
     @abstractmethod
-    def batch_sz_per_gpu(self) -> int:
+    def batch_size(self) -> int:
         pass
 
 

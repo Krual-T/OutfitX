@@ -183,7 +183,7 @@ class DistributedTrainer(ABC):
         self.test_dataloader:DataLoader = None
         self.loss = None
         # self.dataloader_workers = cfg.dataloader_workers
-        # self.batch_size = cfg.batch_sz_per_gpu
+        # self.batch_size = cfg.batch_size
 
     @contextmanager
     def safe_process_context(self, *args, **kwargs,):
