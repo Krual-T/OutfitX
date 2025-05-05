@@ -445,12 +445,13 @@ class DistributedTrainer(ABC):
         }, checkpoint_path)
         return checkpoint_path
 
-    def load_checkpoint(self, ckpt_path: str,*args,**kwargs):
+    def load_checkpoint(self, ckpt_path: str,only_load_model:bool = False, *args, **kwargs):
         """
         加载模型检查点，包括模型参数、优化器状态、学习率调节器状态、scaler状态。
         注意：
             1. 检查点文件会被加载到所有进程中，因此需要在所有进程中都能访问到。
             2. 不要在with以外使用
+        :param only_load_model: bool
         :param ckpt_path:str
         :param args:
         :param kwargs:
@@ -459,11 +460,12 @@ class DistributedTrainer(ABC):
         map_location = f'cuda:{self.local_rank}' if torch.cuda.is_available() else 'cpu'
         ckpt = torch.load(ckpt_path,*args,map_location=map_location,**kwargs)
         self.model.module.load_state_dict(ckpt['model'])
-        self.optimizer.load_state_dict(ckpt['optimizer'])
-        if self.scheduler and ckpt['scheduler']:
-            self.scheduler.load_state_dict(ckpt['scheduler'])
-        if self.scaler and ckpt['scaler']:
-            self.scaler.load_state_dict(ckpt['scaler'])
+        if not only_load_model:
+            self.optimizer.load_state_dict(ckpt['optimizer'])
+            if self.scheduler is not None:
+                self.scheduler.load_state_dict(ckpt['scheduler'])
+            if self.scaler is not None:
+                self.scaler.load_state_dict(ckpt['scaler'])
 
     @final
     @property
@@ -503,8 +505,10 @@ class DistributedTrainer(ABC):
 
             self.set_log_[level](msg)
 
-            if self.wandb_run is not None and metrics is not None:
-                self.wandb_run.log(metrics)
+            if metrics is not None:
+
+                if self.wandb_run is not None:
+                    self.wandb_run.log(metrics)
 
     @abstractmethod
     def load_model(self)->nn.Module:
