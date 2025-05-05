@@ -22,8 +22,7 @@ class BaseTrainConfig(ABC):
     @abstractmethod
     def batch_size(self) -> int:
         pass
-
-
+    use_amp: bool = True
     # 训练配置
     n_epochs: int = 200
     learning_rate: float = 2e-5

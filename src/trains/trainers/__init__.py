@@ -1,2 +1,2 @@
 from .precompute_embedding_script import PrecomputeEmbeddingScript
-from .compatibility_prediction_trainer import CompatibilityTrainer
+from .compatibility_prediction_trainer import CompatibilityPredictionTrainer
