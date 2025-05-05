@@ -18,7 +18,7 @@ from src.trains.datasets.polyvore.polyvore_compatibility_dataset import Polyvore
 from src.trains.trainers.distributed_trainer import DistributedTrainer
 from torchmetrics.classification import BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryF1Score, BinaryAccuracy
 
-class CompatibilityTrainer(DistributedTrainer):
+class CompatibilityPredictionTrainer(DistributedTrainer):
 
     def __init__(self, cfg:Optional[CompatibilityPredictionTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']= 'train-valid'):
         if cfg is None:
@@ -83,11 +83,14 @@ class CompatibilityTrainer(DistributedTrainer):
                     epoch=epoch,
             )
             metrics = {
-                'step': epoch * len(self.train_dataloader) + step,
                 'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
                 **metrics
             }
-            metrics = {f'train-batch:{k}': v for k, v in metrics.items()}
+            metrics = {f'train/batch/{k}': v for k, v in metrics.items()}
+            metrics = {
+                'step': epoch * len(self.train_dataloader) + step,
+                **metrics
+            }
             self.log(
                 level='info',
                 msg=str(metrics),
@@ -115,10 +118,14 @@ class CompatibilityTrainer(DistributedTrainer):
             local_epoch_time=local_epoch_time,
             batch_count=len(self.train_dataloader)
         )
-        metrics = {f'train-epoch:{k}': v for k, v in metrics.items()}
+        metrics = {f'train/epoch/{k}': v for k, v in metrics.items()}
+        metrics = {
+            'epoch':epoch,
+            **metrics
+        }
         self.log(
             level='info',
-            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> End \n {str(metrics)}",
+            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} -->Train End \n {str(metrics)}",
             metrics=metrics
         )
 
@@ -155,11 +162,11 @@ class CompatibilityTrainer(DistributedTrainer):
                     local_batch_time=local_batch_time,
                     epoch=epoch,
             )
+            metrics = {f'valid/batch/{k}': v for k, v in metrics.items()}
             metrics = {
                 'step': epoch * len(self.train_dataloader) + step,
                 **metrics
             }
-            metrics = {f'valid-batch:{k}': v for k, v in metrics.items()}
             self.log(
                 level='info',
                 msg=str(metrics),
@@ -189,17 +196,59 @@ class CompatibilityTrainer(DistributedTrainer):
         )
         if metrics['AUC'] > self.best_AUC:
             self.best_AUC = metrics['AUC']
-            self.save_checkpoint(epoch=epoch, metrics=metrics)
-        metrics = {f'valid-epoch:{k}': v for k, v in metrics.items()}
+            self.save_checkpoint(epoch=epoch)
+        metrics = {f'valid/epoch/{k}': v for k, v in metrics.items()}
+        metrics = {
+            'epoch':epoch,
+            **metrics
+        }
         self.log(
             level='info',
-            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> End \n {str(metrics)}",
+            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> Valid End \n\n {str(metrics)} \n",
             metrics=metrics
         )
 
     @torch.no_grad()
     def test(self):
-        pass
+        ckpt_path = "CP_best.pth"
+        self.load_checkpoint(ckpt_path=ckpt_path, only_load_model=True)
+        self.model.eval()
+        test_processor = tqdm(self.test_dataloader, desc='[Test] Compatibility Prediction')
+        all_y_hats = []
+        all_labels = []
+        for step, (queries, labels) in enumerate(test_processor):
+            labels = torch.tensor(
+                data=labels,
+                dtype=torch.float32,
+                device=self.local_rank
+            )
+            with autocast(enabled=self.cfg.use_amp):
+                y_hats = self.model(queries)
+            all_y_hats.append(y_hats.detach())
+            all_labels.append(labels.detach())
+            metrics = self.compute_cp_metrics(y_hats=all_y_hats[-1], labels=all_labels[-1])
+            metrics = {f'test/{k}': v for k, v in metrics.items()}
+            metrics = {
+                'step': step,
+                **metrics
+            }
+            self.log(
+                level='info',
+                msg=str(metrics),
+                metrics=metrics
+            )
+            test_processor.set_postfix(**metrics)
+
+        all_y_hats = torch.cat(all_y_hats, dim=0)
+        all_labels = torch.cat(all_labels, dim=0)
+
+        metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
+        metrics = {f'test/all/{k}': v for k, v in metrics.items()}
+        self.log(
+            level='info',
+            msg=f"[Test] Compatibility --> Results:\n\n {str(metrics)} \n",
+            metrics=metrics
+        )
 
     def setup_train_and_valid_dataloader(self):
         item_embeddings = self.load_embeddings(embed_file_prefix="embedding_subset_")
@@ -280,6 +329,8 @@ class CompatibilityTrainer(DistributedTrainer):
         self.recall_metric = BinaryRecall().to(self.local_rank)
         self.f1_metric = BinaryF1Score().to(self.local_rank)
         self.accuracy_metric = BinaryAccuracy().to(self.local_rank)
+        if self.world_size >1 and self.run_mode == 'test':
+            raise ValueError("测试模式下不支持分布式")
 
     def load_model(self) -> nn.Module:
         cfg = OutfitTransformerConfig()
