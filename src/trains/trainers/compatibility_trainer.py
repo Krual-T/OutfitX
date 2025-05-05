@@ -36,158 +36,6 @@ class CompatibilityTrainer(DistributedTrainer):
         self.f1_metric:BinaryF1Score = None
         self.accuracy_metric:BinaryAccuracy = None
 
-    def hook_after_setup(self):
-        # 所有指标提前初始化一次，可以放在模型或 Trainer 中复用
-        self.auroc_metric = BinaryAUROC().to(self.local_rank)  # 或 device
-        self.precision_metric = BinaryPrecision().to(self.local_rank)
-        self.recall_metric = BinaryRecall().to(self.local_rank)
-        self.f1_metric = BinaryF1Score().to(self.local_rank)
-        self.accuracy_metric = BinaryAccuracy().to(self.local_rank)
-
-    def load_model(self) -> nn.Module:
-        cfg = OutfitTransformerConfig()
-        return OutfitTransformer(cfg=cfg)
-
-    def load_embeddings(self,embed_file_prefix:str="embedding_subset_") -> dict:
-        """
-        合并所有 embedding_subset_{rank}.pkl 文件，返回包含完整 id 列表和嵌入矩阵的 dict。
-        """
-        embedding_dir = self.cfg.precomputed_embedding_dir
-        prefix = embed_file_prefix
-        files = sorted(embedding_dir.glob(f"{prefix}*.pkl"))
-        if not files:
-            raise FileNotFoundError(f"找不到任何文件: {prefix}*.pkl")
-
-        all_ids = []
-        all_embeddings = []
-
-        for file in files:
-            with open(file, 'rb') as f:
-                data = pickle.load(f)
-                all_ids.extend(data['ids'])
-                all_embeddings.append(data['embeddings'])
-
-        merged_embeddings = np.concatenate(all_embeddings, axis=0)
-        return {'ids': all_ids, 'embeddings': merged_embeddings}
-
-    def load_optimizer(self) -> torch.optim.Optimizer:
-        return torch.optim.AdamW(self.model.parameters(), lr=self.cfg.learning_rate)
-
-    def load_scheduler(self):
-        return torch.optim.lr_scheduler.OneCycleLR(
-            optimizer=self.optimizer,
-            max_lr=self.cfg.learning_rate,
-            epochs=self.cfg.n_epochs,
-            steps_per_epoch=len(self.train_dataloader) // self.cfg.accumulation_steps,
-            pct_start=0.3,
-            anneal_strategy='cos',
-            div_factor=25,
-            final_div_factor=1e4
-    )
-
-    def load_scaler(self):
-        return torch.amp.GradScaler()
-
-    def load_loss(self):
-        return FocalLoss(alpha=0.5, gamma=2, reduction='mean')
-
-    def setup_dataloaders(self):
-        item_embeddings = self.load_embeddings(embed_file_prefix="embedding_subset_")
-        collate_fn = lambda batch:(
-            [item[0] for item in batch],
-            [item[1] for item in batch]
-        )
-        if self.run_mode == 'train-valid':
-            train_dataset = PolyvoreCompatibilityDataset(
-                polyvore_type=self.cfg.polyvore_type,
-                mode='train',
-                dataset_dir=self.cfg.dataset_dir,
-                embedding_dict=item_embeddings,
-                load_image=self.cfg.load_image
-            )
-            train_sampler = DistributedSampler(
-                dataset=train_dataset,
-                num_replicas=self.world_size,
-                rank=self.rank,
-                shuffle=True,
-                drop_last=True
-            )
-            self.train_dataloader = DataLoader(
-                dataset=train_dataset,
-                batch_size=self.cfg.batch_sz_per_gpu,
-                sampler=train_sampler,
-                num_workers=self.cfg.num_workers,
-                pin_memory=True,
-                collate_fn=collate_fn
-            )
-            valid_dataset = PolyvoreCompatibilityDataset(
-                polyvore_type=self.cfg.polyvore_type,
-                mode='valid',
-                dataset_dir=self.cfg.dataset_dir,
-                embedding_dict=item_embeddings,
-                load_image=self.cfg.load_image
-            )
-            valid_sampler = DistributedSampler(
-                dataset=valid_dataset,
-                num_replicas=self.world_size,
-                rank=self.rank,
-                shuffle=False,
-                drop_last=False
-            )
-            self.valid_dataloader = DataLoader(
-                dataset=valid_dataset,
-                batch_size=self.cfg.batch_sz_per_gpu,
-                sampler=valid_sampler,
-                num_workers=self.cfg.num_workers,
-                pin_memory=True,
-                collate_fn=collate_fn
-            )
-        elif self.run_mode == 'test':
-            test_dataset = PolyvoreCompatibilityDataset(
-                polyvore_type=self.cfg.polyvore_type,
-                mode='test',
-                dataset_dir=self.cfg.dataset_dir,
-                embedding_dict=item_embeddings,
-                load_image=self.cfg.load_image
-            )
-
-    def build_metrics(
-        self,
-        local_y_hats:torch.Tensor,
-        local_labels:torch.Tensor,
-        local_loss:torch.Tensor,
-        local_time:torch.Tensor,
-        epoch:int,
-        batch_count:int = 1,
-    ):
-        with self.safe_process_context(epoch=epoch):
-            local_y_hats = local_y_hats.detach()
-            local_labels = local_labels.detach()
-            local_loss = local_loss.detach()
-            # 一般不会很大，所以可以直接 gather 到当前进程
-            all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
-            all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
-            all_loss = [torch.empty_like(local_loss) for _ in range(self.world_size)]
-            all_time = [torch.empty_like(local_time) for _ in range(self.world_size)]
-        # maybe use all_gather_into_tensor ?
-        dist.all_gather(all_y_hats, local_y_hats)
-        dist.all_gather(all_labels, local_labels)
-        dist.all_gather(all_loss, local_loss)
-        dist.all_gather(all_time, local_time)
-
-        all_y_hats = torch.cat(all_y_hats, dim=0)
-        all_labels = torch.cat(all_labels, dim=0)
-        all_loss = torch.cat(all_loss, dim=0).mean()/batch_count
-        all_time = torch.cat(all_time, dim=0).mean()
-
-        metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
-        return {
-            'loss': all_loss.item(),
-            'time': all_time.item(),
-            **metrics
-        }
-
-
     def train_epoch(self, epoch: int) -> None:
         # 记录epoch开始时间
         epoch_start_time = time.time()
@@ -277,36 +125,6 @@ class CompatibilityTrainer(DistributedTrainer):
         )
         # TODO: 保存模型
 
-
-    def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
-
-        # 确保输入在同一个设备上
-        y_hats = y_hats.to(self.local_rank)
-        labels = labels.to(self.local_rank)
-
-        # AUC 需要概率
-        auc = self.auroc_metric(y_hats, labels)
-
-        # 其他指标需要离散分类
-        pred_labels = (y_hats > 0.5).int()
-
-        # Precision, Recall, F1, Accuracy
-        precision = self.precision_metric(pred_labels, labels)
-        recall = self.recall_metric(pred_labels, labels)
-        f1 = self.f1_metric(pred_labels, labels)
-        accuracy = self.accuracy_metric(pred_labels, labels)
-
-        # 转为 Python float 方便日志或 JSON 输出
-        return {
-            'Accuracy': accuracy.item(),
-            'Precision': precision.item(),
-            'Recall': recall.item(),
-            'F1': f1.item(),
-            'AUC': auc.item()
-        }
-
-
-
     @torch.no_grad()
     def valid_epoch(self, epoch: int):
         # 记录epoch开始时间
@@ -379,8 +197,194 @@ class CompatibilityTrainer(DistributedTrainer):
             metrics=metrics
         )
 
+    @torch.no_grad()
     def test(self):
         pass
 
+    def setup_train_and_valid_dataloader(self):
+        item_embeddings = self.load_embeddings(embed_file_prefix="embedding_subset_")
+        collate_fn = lambda batch:(
+            [item[0] for item in batch],
+            [item[1] for item in batch]
+        )
+        train_dataset = PolyvoreCompatibilityDataset(
+            polyvore_type=self.cfg.polyvore_type,
+            mode='train',
+            dataset_dir=self.cfg.dataset_dir,
+            embedding_dict=item_embeddings,
+            load_image=self.cfg.load_image
+        )
+        train_sampler = DistributedSampler(
+            dataset=train_dataset,
+            num_replicas=self.world_size,
+            rank=self.rank,
+            shuffle=True,
+            drop_last=True
+        )
+        self.train_dataloader = DataLoader(
+            dataset=train_dataset,
+            batch_size=self.cfg.batch_sz_per_gpu,
+            sampler=train_sampler,
+            num_workers=self.cfg.num_workers,
+            pin_memory=True,
+            collate_fn=collate_fn
+        )
+        valid_dataset = PolyvoreCompatibilityDataset(
+            polyvore_type=self.cfg.polyvore_type,
+            mode='valid',
+            dataset_dir=self.cfg.dataset_dir,
+            embedding_dict=item_embeddings,
+            load_image=self.cfg.load_image
+        )
+        valid_sampler = DistributedSampler(
+            dataset=valid_dataset,
+            num_replicas=self.world_size,
+            rank=self.rank,
+            shuffle=False,
+            drop_last=False
+        )
+        self.valid_dataloader = DataLoader(
+            dataset=valid_dataset,
+            batch_size=self.cfg.batch_sz_per_gpu,
+            sampler=valid_sampler,
+            num_workers=self.cfg.num_workers,
+            pin_memory=True,
+            collate_fn=collate_fn
+        )
+
+    def setup_test_dataloader(self):
+        item_embeddings = self.load_embeddings(embed_file_prefix="embedding_subset_")
+        collate_fn = lambda batch:(
+            [item[0] for item in batch],
+            [item[1] for item in batch]
+        )
+        test_dataset = PolyvoreCompatibilityDataset(
+            polyvore_type=self.cfg.polyvore_type,
+            mode='test',
+            dataset_dir=self.cfg.dataset_dir,
+            embedding_dict=item_embeddings,
+            load_image=self.cfg.load_image
+        )
+
+    def hook_after_setup(self):
+        # 所有指标提前初始化一次，可以放在模型或 Trainer 中复用
+        self.auroc_metric = BinaryAUROC().to(self.local_rank)  # 或 device
+        self.precision_metric = BinaryPrecision().to(self.local_rank)
+        self.recall_metric = BinaryRecall().to(self.local_rank)
+        self.f1_metric = BinaryF1Score().to(self.local_rank)
+        self.accuracy_metric = BinaryAccuracy().to(self.local_rank)
+
+    def load_model(self) -> nn.Module:
+        cfg = OutfitTransformerConfig()
+        return OutfitTransformer(cfg=cfg)
+
+    def load_embeddings(self,embed_file_prefix:str="embedding_subset_") -> dict:
+        """
+        合并所有 embedding_subset_{rank}.pkl 文件，返回包含完整 id 列表和嵌入矩阵的 dict。
+        """
+        embedding_dir = self.cfg.precomputed_embedding_dir
+        prefix = embed_file_prefix
+        files = sorted(embedding_dir.glob(f"{prefix}*.pkl"))
+        if not files:
+            raise FileNotFoundError(f"找不到任何文件: {prefix}*.pkl")
+
+        all_ids = []
+        all_embeddings = []
+
+        for file in files:
+            with open(file, 'rb') as f:
+                data = pickle.load(f)
+                all_ids.extend(data['ids'])
+                all_embeddings.append(data['embeddings'])
+
+        merged_embeddings = np.concatenate(all_embeddings, axis=0)
+        return {'ids': all_ids, 'embeddings': merged_embeddings}
+
+    def load_optimizer(self) -> torch.optim.Optimizer:
+        return torch.optim.AdamW(self.model.parameters(), lr=self.cfg.learning_rate)
+
+    def load_scheduler(self):
+        return torch.optim.lr_scheduler.OneCycleLR(
+            optimizer=self.optimizer,
+            max_lr=self.cfg.learning_rate,
+            epochs=self.cfg.n_epochs,
+            steps_per_epoch=len(self.train_dataloader) // self.cfg.accumulation_steps,
+            pct_start=0.3,
+            anneal_strategy='cos',
+            div_factor=25,
+            final_div_factor=1e4
+    )
+
+    def load_scaler(self):
+        return torch.amp.GradScaler()
+
+    def load_loss(self):
+        return FocalLoss(alpha=0.5, gamma=2, reduction='mean')
+
+    def build_metrics(
+        self,
+        local_y_hats:torch.Tensor,
+        local_labels:torch.Tensor,
+        local_loss:torch.Tensor,
+        local_time:torch.Tensor,
+        epoch:int,
+        batch_count:int = 1,
+    ):
+        with self.safe_process_context(epoch=epoch):
+            local_y_hats = local_y_hats.detach()
+            local_labels = local_labels.detach()
+            local_loss = local_loss.detach()
+            # 一般不会很大，所以可以直接 gather 到当前进程
+            all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
+            all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
+            all_loss = [torch.empty_like(local_loss) for _ in range(self.world_size)]
+            all_time = [torch.empty_like(local_time) for _ in range(self.world_size)]
+        # maybe use all_gather_into_tensor ?
+        dist.all_gather(all_y_hats, local_y_hats)
+        dist.all_gather(all_labels, local_labels)
+        dist.all_gather(all_loss, local_loss)
+        dist.all_gather(all_time, local_time)
+
+        all_y_hats = torch.cat(all_y_hats, dim=0)
+        all_labels = torch.cat(all_labels, dim=0)
+        all_loss = torch.cat(all_loss, dim=0).mean()/batch_count
+        all_time = torch.cat(all_time, dim=0).mean()
+
+        metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
+        return {
+            'loss': all_loss.item(),
+            'time': all_time.item(),
+            **metrics
+        }
+
+    def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
+
+        # 确保输入在同一个设备上
+        y_hats = y_hats.to(self.local_rank)
+        labels = labels.to(self.local_rank)
+
+        # AUC 需要概率
+        auc = self.auroc_metric(y_hats, labels)
+
+        # 其他指标需要离散分类
+        pred_labels = (y_hats > 0.5).int()
+
+        # Precision, Recall, F1, Accuracy
+        precision = self.precision_metric(pred_labels, labels)
+        recall = self.recall_metric(pred_labels, labels)
+        f1 = self.f1_metric(pred_labels, labels)
+        accuracy = self.accuracy_metric(pred_labels, labels)
+
+        # 转为 Python float 方便日志或 JSON 输出
+        return {
+            'Accuracy': accuracy.item(),
+            'Precision': precision.item(),
+            'Recall': recall.item(),
+            'F1': f1.item(),
+            'AUC': auc.item()
+        }
+
+    def setup_custom_dataloader(self):
+        pass
     def custom_task(self, *args, **kwargs):
         pass
