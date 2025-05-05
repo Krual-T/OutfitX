@@ -52,7 +52,7 @@ class BaseTrainConfig(ABC):
 
     def __post_init__(self):
         self.dataset_dir:Path = ROOT_DIR / 'datasets' / self.dataset_name
-        self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.project_name
+        self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.name
         self.precomputed_embedding_dir:Path = self.dataset_dir / 'precomputed_embeddings'
         if self.world_size == -1:
             self.world_size = torch.cuda.device_count()

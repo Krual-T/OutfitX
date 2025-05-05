@@ -1,11 +1,10 @@
-import os
 import pickle
 import time
-from typing import Optional, Literal, cast
-
 import numpy as np
 import torch
+
 from torch import nn
+from typing import Optional, Literal, cast
 from torch.cpu.amp import autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -14,20 +13,18 @@ from torch import distributed as dist
 from src.losses import FocalLoss
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
-from src.models.utils.model_utils import flatten_seq_to_one_dim
-from src.trains.configs.compatibility_train_config import CompatibilityTrainConfig
+from src.trains.configs.compatibility_prediction_train_config import CompatibilityPredictionTrainConfig
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityDataset
 from src.trains.trainers.distributed_trainer import DistributedTrainer
-from torchmetrics.classification import (
-    BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryF1Score, BinaryAccuracy
-)
+from torchmetrics.classification import BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryF1Score, BinaryAccuracy
+
 class CompatibilityTrainer(DistributedTrainer):
 
-    def __init__(self,cfg:Optional[CompatibilityTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']='train-valid'):
+    def __init__(self, cfg:Optional[CompatibilityPredictionTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']= 'train-valid'):
         if cfg is None:
-            cfg = CompatibilityTrainConfig()
+            cfg = CompatibilityPredictionTrainConfig()
         super().__init__(cfg=cfg, run_mode=run_mode)
-        self.cfg = cast(CompatibilityTrainConfig,cfg)
+        self.cfg = cast(CompatibilityPredictionTrainConfig, cfg)
         self.loss:FocalLoss = None
         # 所有指标提前初始化一次，可以放在模型或 Trainer 中复用
         self.auroc_metric:BinaryAUROC = None
@@ -35,6 +32,7 @@ class CompatibilityTrainer(DistributedTrainer):
         self.recall_metric:BinaryRecall = None
         self.f1_metric:BinaryF1Score = None
         self.accuracy_metric:BinaryAccuracy = None
+        self.best_AUC = 0.0
 
     def train_epoch(self, epoch: int) -> None:
         # 记录epoch开始时间
@@ -123,7 +121,6 @@ class CompatibilityTrainer(DistributedTrainer):
             msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> End \n {str(metrics)}",
             metrics=metrics
         )
-        # TODO: 保存模型
 
     @torch.no_grad()
     def valid_epoch(self, epoch: int):
@@ -190,6 +187,9 @@ class CompatibilityTrainer(DistributedTrainer):
             local_epoch_time=local_epoch_time,
             batch_count=len(self.train_dataloader)
         )
+        if metrics['AUC'] > self.best_AUC:
+            self.best_AUC = metrics['AUC']
+            self.save_checkpoint(epoch=epoch, metrics=metrics)
         metrics = {f'valid-epoch:{k}': v for k, v in metrics.items()}
         self.log(
             level='info',
