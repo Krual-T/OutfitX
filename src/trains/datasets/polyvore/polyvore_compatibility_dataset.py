@@ -1,7 +1,7 @@
 import json
 import pathlib
 from typing import Literal
-from src.trains.configs.base_train_config import ROOT_DIR
+from src.project_settings.info import PROJECT_DIR as ROOT_DIR
 from .polyvore_item_dataset import PolyvoreItemDataset
 
 

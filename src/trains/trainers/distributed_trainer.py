@@ -21,8 +21,9 @@ class DistributedTrainer(ABC):
     """
     必须在 'with' 语句中使用，并运行命令：
 
-        torchrun --nproc_per_node=4 --master_port=12345 main.py
+        - torchrun --nproc_per_node=4 --master_port=12345 main.py
 
+        - torchrun --standalone --nproc_per_node=xxx main.py
     ---------------------------------------------------------------------------------------------------------------------------------------------
 
     :example：
@@ -36,11 +37,11 @@ class DistributedTrainer(ABC):
 
             - 'train-valid': 仅执行 train_epoch 和 valid_epoch，不执行 test_epoch 和 custom_task。方法中包含关于 train/valid 的分布式训练提醒。
 
-            - 'test': 仅执行测试
+            - 'test': 仅执行测试（无轮次）
 
-            - 'custom': 自定义任务
+            - 'custom': 自定义任务（无轮次）
 
-            如果以上模式无法满足需求，可以自定义实现 running_epoch 方法（以 epoch 为单位）或重写 run 方法，但仍建议参考我的 run 方法实现。
+            通常以上模式可以满足需求，可以自定义实现 'custom_task' 方法（无轮次）或重写 run 方法，但仍建议参考我的 run 方法实现。
 
         cfg: BaseTrainConfig(包含训练过程所需的配置项)：
 
@@ -81,10 +82,13 @@ class DistributedTrainer(ABC):
         - 提供 self.log 方法用于打印日志（支持 wandb），具体请查看方法文档。
         - 如果您有特殊的日志需求，建议自行重写 setup_logger 和 log 方法（但不推荐）。
 
-    强制要求定义的几个 DataLoader 名称，请在 setup_dataloaders 中初始化（直接注册到 self 中，而非返回）：
+    强制要求定义的几个 DataLoader 名称，请根据run_mode初始化对应的dataloader，
+    提供setup_train_and_valid_dataloader方法，和setup_test_dataloader方法，
+    以及setup_custom_dataloader方法（钩子）。
         - self.train_dataloader: DataLoader = None
         - self.valid_dataloader: DataLoader = None
         - self.test_dataloader: DataLoader = None
+        - 其他需求在钩子函数（setup_custom_dataloader）中实现。
 
     关于分布式的一些注意点：
         死锁:分布式训练中由于一些方法会阻塞进程，当出现一些进程达到同步点而其他经常因为某些原因，
@@ -93,9 +97,9 @@ class DistributedTrainer(ABC):
 
         解决方法：
             1. 避免在 if 等条件语句中阻塞进程，违反了分布式训练的原则（确保所有进程都能达到同步点）。
-            2. 捕获异常并继续raise异常并广播到所有进程，并终止全部进程（就像@safe_process，一个内部装饰器的实现那样做）
+            2. 捕获异常并继续raise异常并广播到所有进程，并终止全部进程（就像safe_process_context，一个上下文管理器的实现那样做）
 
-        幸运的是，本架构对于每一个epoch执行的任务（running_epoch方法）进行了最外层的异常装饰（@safe_process），
+        幸运的是，本架构对于每一个epoch执行的任务（running_epoch方法）提供了上下文管理机制（safe_process_context），
         这意味着你不用太担心繁琐的try except 语句，只需要你遵循分布式原则并在你的代码中抛出异常即可（不要except异常却不raise异常）。
         如果我的实现无法满足你的日志记录或其他需求，你可以按照我的实现思路自行实现。
 
@@ -116,7 +120,7 @@ class DistributedTrainer(ABC):
         - self.load_checkpoint: 用于加载检查点，具体请查看方法文档。
         - self.log: 用于打印日志，具体请查看方法文档。
         - self.set_log_: 用于设置日志级别（log内部调用），具体请查看方法文档。
-        - @safe_process: 用于装饰方法，用于捕获异常并广播到所有进程，具体请查看方法文档。
+        - safe_process_context: 用于包裹可能出错的代码块（不要包裹带阻塞的dist方法），用于捕获异常并广播到所有进程，具体请查看方法文档。
 
     内部所有属性：
         - self.cfg = cfg
@@ -178,8 +182,8 @@ class DistributedTrainer(ABC):
         self.valid_dataloader:DataLoader = None
         self.test_dataloader:DataLoader = None
         self.loss = None
-        # self.num_workers = cfg.n_workers_per_gpu
-        # self.batch_size = cfg.batch_sz_per_gpu
+        # self.dataloader_workers = cfg.dataloader_workers
+        # self.batch_size = cfg.batch_size
 
     @contextmanager
     def safe_process_context(self, *args, **kwargs,):
@@ -215,8 +219,6 @@ class DistributedTrainer(ABC):
         elif self.run_mode == 'custom':
             # 自定义任务
             self.custom_task()
-
-            # FIXME test and custom task need break
 
     def build_error_msg(self, epoch: int, e: BaseException) -> str:
         """
@@ -404,8 +406,17 @@ class DistributedTrainer(ABC):
             setup_failed("data_loaders")
             raise e
 
+    @abstractmethod
     def hook_after_setup(self):
         pass
+
+    def setup_dataloaders(self):
+        if self.run_mode == 'train-valid':
+            self.setup_train_and_valid_dataloader()
+        elif self.run_mode == 'test':
+            self.setup_test_dataloader()
+        elif self.run_mode == 'custom':
+            self.setup_custom_dataloader()
 
     def save_checkpoint(self, epoch):
         """
@@ -434,12 +445,13 @@ class DistributedTrainer(ABC):
         }, checkpoint_path)
         return checkpoint_path
 
-    def load_checkpoint(self, ckpt_path: str,*args,**kwargs):
+    def load_checkpoint(self, ckpt_path: str,only_load_model:bool = False, *args, **kwargs):
         """
         加载模型检查点，包括模型参数、优化器状态、学习率调节器状态、scaler状态。
         注意：
             1. 检查点文件会被加载到所有进程中，因此需要在所有进程中都能访问到。
             2. 不要在with以外使用
+        :param only_load_model: bool
         :param ckpt_path:str
         :param args:
         :param kwargs:
@@ -448,11 +460,12 @@ class DistributedTrainer(ABC):
         map_location = f'cuda:{self.local_rank}' if torch.cuda.is_available() else 'cpu'
         ckpt = torch.load(ckpt_path,*args,map_location=map_location,**kwargs)
         self.model.module.load_state_dict(ckpt['model'])
-        self.optimizer.load_state_dict(ckpt['optimizer'])
-        if self.scheduler and ckpt['scheduler']:
-            self.scheduler.load_state_dict(ckpt['scheduler'])
-        if self.scaler and ckpt['scaler']:
-            self.scaler.load_state_dict(ckpt['scaler'])
+        if not only_load_model:
+            self.optimizer.load_state_dict(ckpt['optimizer'])
+            if self.scheduler is not None:
+                self.scheduler.load_state_dict(ckpt['scheduler'])
+            if self.scaler is not None:
+                self.scaler.load_state_dict(ckpt['scaler'])
 
     @final
     @property
@@ -492,8 +505,10 @@ class DistributedTrainer(ABC):
 
             self.set_log_[level](msg)
 
-            if self.wandb_run is not None and metrics is not None:
-                self.wandb_run.log(metrics)
+            if metrics is not None:
+
+                if self.wandb_run is not None:
+                    self.wandb_run.log(metrics)
 
     @abstractmethod
     def load_model(self)->nn.Module:
@@ -512,11 +527,15 @@ class DistributedTrainer(ABC):
         pass
 
     @abstractmethod
-    def setup_dataloaders(self):
-        """
-        加载多个dataloader（先加载dataset，然后加载sampler，然后加载dataloader）
-        :return:
-        """
+    def setup_train_and_valid_dataloader(self):
+        pass
+
+    @abstractmethod
+    def setup_test_dataloader(self):
+        pass
+
+    @abstractmethod
+    def setup_custom_dataloader(self):
         pass
 
     @abstractmethod
@@ -566,7 +585,9 @@ class DistributedTrainer(ABC):
     @abstractmethod
     def valid_epoch(self, epoch):
         """
+        记得使用@torch.no_grad()
         记得在valid_epoch中调用self.log()方法，将验证结果记录到日志中
+        使用带阻塞的dist方法前，请将有可能出错的部分采用with safe_process_context(epoch)包裹
         :return:
         """
         pass
@@ -603,8 +624,8 @@ class DistributedTrainer(ABC):
         self.local_rank = int(os.environ["LOCAL_RANK"])
         self.rank = int(os.environ["RANK"])
         self.world_size = int(os.environ["WORLD_SIZE"])
-        self.cfg.n_workers_per_gpu = min(
-            self.cfg.n_workers_per_gpu,
+        self.cfg.dataloader_workers = min(
+            self.cfg.dataloader_workers,
             max(1, (os.cpu_count() // max(1,torch.cuda.device_count()))-1)
         )
         self.setup()

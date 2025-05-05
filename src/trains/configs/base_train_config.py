@@ -5,10 +5,9 @@ import torch
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal, Optional,Type
+from typing import Literal, Optional
+from src.project_settings.info import PROJECT_NAME, PROJECT_DIR as ROOT_DIR
 
-PROJECT_NAME = '基于CNN-Transformer跨模态融合的穿搭推荐模型研究'
-ROOT_DIR: Path = pathlib.Path(__file__).parent.parent.parent.parent.absolute()
 WANDB_KEY = 'd88f9f90e3e7f7459c00a66f323751a06e87d997'
 
 @dataclass
@@ -16,15 +15,14 @@ class BaseTrainConfig(ABC):
     # 数据集配置
     dataset_name: str = 'polyvore'
     # 分布式配置
-    n_workers_per_gpu: int = 4
+    dataloader_workers: int = 4
     world_size: int = -1
     backend:Literal['nccl', 'gloo']='nccl' if torch.cuda.is_available() else 'gloo'
     @property
     @abstractmethod
-    def batch_sz_per_gpu(self) -> int:
+    def batch_size(self) -> int:
         pass
-
-
+    use_amp: bool = True
     # 训练配置
     n_epochs: int = 200
     learning_rate: float = 2e-5
@@ -53,7 +51,7 @@ class BaseTrainConfig(ABC):
 
     def __post_init__(self):
         self.dataset_dir:Path = ROOT_DIR / 'datasets' / self.dataset_name
-        self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.project_name
+        self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.name
         self.precomputed_embedding_dir:Path = self.dataset_dir / 'precomputed_embeddings'
         if self.world_size == -1:
             self.world_size = torch.cuda.device_count()
