@@ -21,8 +21,9 @@ class DistributedTrainer(ABC):
     """
     必须在 'with' 语句中使用，并运行命令：
 
-        torchrun --nproc_per_node=4 --master_port=12345 main.py
+        - torchrun --nproc_per_node=4 --master_port=12345 main.py
 
+        - torchrun --standalone --nproc_per_node=xxx main.py
     ---------------------------------------------------------------------------------------------------------------------------------------------
 
     :example：
