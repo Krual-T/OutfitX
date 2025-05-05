@@ -23,10 +23,10 @@ from torchmetrics.classification import (
 )
 class CompatibilityTrainer(DistributedTrainer):
 
-    def __init__(self,cfg:Optional[CompatibilityTrainConfig]=None):
+    def __init__(self,cfg:Optional[CompatibilityTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']='train-valid'):
         if cfg is None:
             cfg = CompatibilityTrainConfig()
-        super().__init__(cfg=cfg)
+        super().__init__(cfg=cfg, run_mode=run_mode)
         self.cfg = cast(CompatibilityTrainConfig,cfg)
         self.loss:FocalLoss = None
         # 所有指标提前初始化一次，可以放在模型或 Trainer 中复用
