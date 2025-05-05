@@ -14,7 +14,9 @@ from src.trains.trainers.distributed_trainer import DistributedTrainer
 from src.trains.datasets import PolyvoreItemDataset
 
 class PrecomputeEmbeddingScript(DistributedTrainer):
-
+    """
+    run mode only support custom
+    """
     def __init__(self,cfg:PrecomputeEmbeddingConfig = None):
         if cfg is None:
             cfg = PrecomputeEmbeddingConfig()
