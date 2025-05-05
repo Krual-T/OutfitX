@@ -14,55 +14,13 @@ from src.trains.trainers.distributed_trainer import DistributedTrainer
 from src.trains.datasets import PolyvoreItemDataset
 
 class PrecomputeEmbeddingScript(DistributedTrainer):
+
     def __init__(self,cfg:PrecomputeEmbeddingConfig = None):
         if cfg is None:
             cfg = PrecomputeEmbeddingConfig()
         super().__init__(cfg=cfg)
         self.cfg = cfg
         self.item_dataloader = None
-
-    def setup_dataloaders(self):
-        item_dataset = PolyvoreItemDataset(self.cfg.dataset_dir,load_image=True)
-        sampler = torch.utils.data.distributed.DistributedSampler(
-            item_dataset,
-            num_replicas=self.world_size,
-            rank=self.rank,
-            shuffle=False  # 预计算不需要打乱顺序
-        )
-        collate_fn = lambda batch:[item for item in batch]
-        self.item_dataloader = DataLoader(
-            dataset=item_dataset,
-            batch_size=self.cfg.batch_sz_per_gpu,
-            sampler=sampler,
-            num_workers=self.cfg.n_workers_per_gpu,
-            collate_fn=collate_fn
-        )
-
-
-    def load_model(self) -> nn.Module:
-        cfg = OutfitTransformerConfig()
-        return OutfitTransformer(cfg=cfg)
-
-    def load_optimizer(self) -> torch.optim.Optimizer:
-        pass
-
-    def load_scheduler(self):
-        pass
-
-    def load_scaler(self):
-        pass
-
-    def load_loss(self):
-        pass
-
-    def train_epoch(self, epoch):
-        pass
-
-    def valid_epoch(self):
-        pass
-
-    def test(self):
-        pass
 
     def custom_task(self, *args, **kwargs):
         self.model.eval()
@@ -89,4 +47,48 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
             pickle.dump({'ids': all_ids, 'embeddings': all_embeddings}, f)
 
         self.log(f"[Rank {self.rank}] 预计算完成！共保存{len(all_ids)}个物品到 {save_path}")
+
+    def setup_custom_dataloader(self):
+        item_dataset = PolyvoreItemDataset(self.cfg.dataset_dir, load_image=True)
+        sampler = torch.utils.data.distributed.DistributedSampler(
+            item_dataset,
+            num_replicas=self.world_size,
+            rank=self.rank,
+            shuffle=False  # 预计算不需要打乱顺序
+        )
+        collate_fn = lambda batch: [item for item in batch]
+        self.item_dataloader = DataLoader(
+            dataset=item_dataset,
+            batch_size=self.cfg.batch_sz_per_gpu,
+            sampler=sampler,
+            num_workers=self.cfg.n_workers_per_gpu,
+            collate_fn=collate_fn
+        )
+
+    def load_model(self) -> nn.Module:
+        cfg = OutfitTransformerConfig()
+        return OutfitTransformer(cfg=cfg)
+
+    def load_optimizer(self) -> torch.optim.Optimizer:
+        pass
+    def load_scheduler(self):
+        pass
+    def load_scaler(self):
+        pass
+    def load_loss(self):
+        pass
+    def train_epoch(self, epoch):
+        pass
+    def valid_epoch(self):
+        pass
+    def test(self):
+        pass
+    def setup_train_and_valid_dataloader(self):
+        pass
+    def setup_test_dataloader(self):
+        pass
+    def hook_after_setup(self):
+        pass
+
+
 
