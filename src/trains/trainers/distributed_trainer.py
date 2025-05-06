@@ -328,7 +328,7 @@ class DistributedTrainer(ABC):
             raise e
         # 初始化loss
         try:
-            self.self.load_loss()
+            self.load_loss()
             if self.loss is not None:
                 setup_completed("loss")
             elif self.run_mode == 'train-valid':
