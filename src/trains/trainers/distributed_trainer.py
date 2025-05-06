@@ -418,7 +418,7 @@ class DistributedTrainer(ABC):
         elif self.run_mode == 'custom':
             self.setup_custom_dataloader()
 
-    def save_checkpoint(self, epoch):
+    def save_checkpoint(self, epoch, ckpt_name = None):
         """
         保存模型检查点，包括模型参数、优化器状态、学习率调节器状态、scaler状态。
         检查点文件名为 epoch_{epoch}.pth，保存在 cfg.checkpoint_dir 目录下。
@@ -434,7 +434,7 @@ class DistributedTrainer(ABC):
         """
         checkpoint_dir = self.cfg.checkpoint_dir
         os.makedirs(checkpoint_dir, exist_ok=True)
-        checkpoint_path = checkpoint_dir / f"epoch_{epoch}.pth"
+        checkpoint_path = checkpoint_dir / (f"epoch_{epoch}.pth" if ckpt_name is None else f"{ckpt_name}.pth")
         torch.save({
             'epoch': epoch,
             'config': self.model.module.cfg.__dict__,

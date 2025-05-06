@@ -14,6 +14,7 @@ from src.losses import FocalLoss
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
 from src.trains.configs.compatibility_prediction_train_config import CompatibilityPredictionTrainConfig
+from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityDataset
 from src.trains.trainers.distributed_trainer import DistributedTrainer
 from torchmetrics.classification import BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryF1Score, BinaryAccuracy
@@ -32,7 +33,14 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         self.recall_metric:BinaryRecall = None
         self.f1_metric:BinaryF1Score = None
         self.accuracy_metric:BinaryAccuracy = None
-        self.best_AUC = 0.0
+        self.best_metrics = {
+            'AUC': 0.0,
+            'Precision': 0.0,
+            'Recall': 0.0,
+            'F1': 0.0,
+            'Accuracy': 0.0,
+            'loss': np.inf,
+        }
 
     def train_epoch(self, epoch: int) -> None:
         # 记录epoch开始时间
@@ -79,7 +87,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     local_y_hats=y_hats.detach(),
                     local_labels=labels.detach(),
                     local_loss=original_loss,
-                    local_batch_time=local_batch_time,
+                    local_time=local_batch_time,
                     epoch=epoch,
             )
             metrics = {
@@ -88,7 +96,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             }
             metrics = {f'train/batch/{k}': v for k, v in metrics.items()}
             metrics = {
-                'step': epoch * len(self.train_dataloader) + step,
+                'batch_step': epoch * len(self.train_dataloader) + step,
                 **metrics
             }
             self.log(
@@ -115,8 +123,9 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             local_y_hats=local_y_hats,
             local_labels=local_labels,
             local_loss=local_total_loss,
-            local_epoch_time=local_epoch_time,
-            batch_count=len(self.train_dataloader)
+            local_time=local_epoch_time,
+            batch_count=len(self.train_dataloader),
+            epoch=epoch
         )
         metrics = {f'train/epoch/{k}': v for k, v in metrics.items()}
         metrics = {
@@ -159,12 +168,12 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     local_y_hats=y_hats.detach(),
                     local_labels=labels.detach(),
                     local_loss=original_loss,
-                    local_batch_time=local_batch_time,
+                    local_time=local_batch_time,
                     epoch=epoch,
             )
             metrics = {f'valid/batch/{k}': v for k, v in metrics.items()}
             metrics = {
-                'step': epoch * len(self.train_dataloader) + step,
+                'batch_step': epoch * len(self.train_dataloader) + step,
                 **metrics
             }
             self.log(
@@ -191,12 +200,13 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             local_y_hats=local_y_hats,
             local_labels=local_labels,
             local_loss=local_total_loss,
-            local_epoch_time=local_epoch_time,
-            batch_count=len(self.train_dataloader)
+            local_time=local_epoch_time,
+            batch_count=len(self.train_dataloader),
+            epoch=epoch
         )
-        if metrics['AUC'] > self.best_AUC:
-            self.best_AUC = metrics['AUC']
-            self.save_checkpoint(epoch=epoch)
+
+        self.maybe_save_best_models(metrics=metrics, epoch=epoch)
+
         metrics = {f'valid/epoch/{k}': v for k, v in metrics.items()}
         metrics = {
             'epoch':epoch,
@@ -227,9 +237,9 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             all_y_hats.append(y_hats.detach())
             all_labels.append(labels.detach())
             metrics = self.compute_cp_metrics(y_hats=all_y_hats[-1], labels=all_labels[-1])
-            metrics = {f'test/{k}': v for k, v in metrics.items()}
+            metrics = {f'test/batch/{k}': v for k, v in metrics.items()}
             metrics = {
-                'step': step,
+                'batch_step': step,
                 **metrics
             }
             self.log(
@@ -251,7 +261,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         )
 
     def setup_train_and_valid_dataloader(self):
-        item_embeddings = self.load_embeddings(embed_file_prefix="embedding_subset_")
+        item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
         collate_fn = lambda batch:(
             [item[0] for item in batch],
             [item[1] for item in batch]
@@ -441,6 +451,24 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             'F1': f1.item(),
             'AUC': auc.item()
         }
+
+    def maybe_save_best_models(self, metrics: dict, epoch: int):
+        for metric_name, best_value in self.best_metrics.items():
+            current_value = metrics[metric_name]
+
+            # 判断是越大越好还是越小越好
+            mode = 'min' if metric_name == 'loss' else 'max'
+            should_save = (current_value < best_value) if mode == 'min' else (current_value > best_value)
+
+            if should_save:
+                self.best_metrics[metric_name] = current_value
+
+                ckpt_name = f"best_{metric_name}"
+                self.save_checkpoint(epoch=epoch, ckpt_name=ckpt_name)
+                self.log(
+                    level='info',
+                    msg=f"✅ New best {metric_name}: {current_value:.4f}, saved to {ckpt_name}.pth"
+                )
 
     def setup_custom_dataloader(self):
         pass
