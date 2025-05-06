@@ -7,7 +7,7 @@ from src.models.datatypes import FashionItem
 
 
 class PolyvoreItemDataset(Dataset):
-
+    embed_file_prefix = 'embedding_subset_'
     def __init__(
             self,
             dataset_dir: str,

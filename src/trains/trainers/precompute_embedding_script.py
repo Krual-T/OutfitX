@@ -44,7 +44,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         precomputed_embedding_dir = self.cfg.precomputed_embedding_dir
         os.makedirs(precomputed_embedding_dir, exist_ok=True)
 
-        save_path = precomputed_embedding_dir / f'embedding_subset_{self.rank}.pkl'
+        save_path = precomputed_embedding_dir / f'{PolyvoreItemDataset.embed_file_prefix}{self.rank}.pkl'
         with open(save_path, 'wb') as f:
             pickle.dump({'ids': all_ids, 'embeddings': all_embeddings}, f)
 
