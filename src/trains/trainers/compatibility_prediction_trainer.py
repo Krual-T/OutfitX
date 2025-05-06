@@ -88,7 +88,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             }
             metrics = {f'train/batch/{k}': v for k, v in metrics.items()}
             metrics = {
-                'step': epoch * len(self.train_dataloader) + step,
+                'batch_step': epoch * len(self.train_dataloader) + step,
                 **metrics
             }
             self.log(
@@ -164,7 +164,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             )
             metrics = {f'valid/batch/{k}': v for k, v in metrics.items()}
             metrics = {
-                'step': epoch * len(self.train_dataloader) + step,
+                'batch_step': epoch * len(self.train_dataloader) + step,
                 **metrics
             }
             self.log(
@@ -227,9 +227,9 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             all_y_hats.append(y_hats.detach())
             all_labels.append(labels.detach())
             metrics = self.compute_cp_metrics(y_hats=all_y_hats[-1], labels=all_labels[-1])
-            metrics = {f'test/{k}': v for k, v in metrics.items()}
+            metrics = {f'test/batch/{k}': v for k, v in metrics.items()}
             metrics = {
-                'step': step,
+                'batch_step': step,
                 **metrics
             }
             self.log(
