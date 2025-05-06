@@ -28,7 +28,6 @@ class PolyvoreItemDataset(Dataset):
         item_id = self.all_item_ids[idx]
         return self.get_item(item_id)
 
-    @staticmethod
     def load_metadata(self):
         metadata_path = self.dataset_dir / 'item_metadata.json'
         with open(metadata_path) as f:
