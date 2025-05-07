@@ -328,7 +328,7 @@ class DistributedTrainer(ABC):
             raise e
         # 初始化loss
         try:
-            self.self.load_loss()
+            self.loss=self.load_loss()
             if self.loss is not None:
                 setup_completed("loss")
             elif self.run_mode == 'train-valid':
@@ -337,6 +337,39 @@ class DistributedTrainer(ABC):
                 not_setup("loss")
         except Exception as e:
             setup_failed("loss")
+            raise e
+        # 初始化dataloader
+        try:
+            self.setup_dataloaders()
+            not_setup_sampler = lambda loader: self.log(f"{loader}初始化完成,但{loader}.sampler 未初始化", level="warning")
+            # train-valid mode
+            if self.run_mode == 'train-valid':
+                # train_dataloader
+                if self.train_dataloader is None:
+                    raise ValueError("In the train-valid mode,the fn: setup_dataloaders() must Register and initialize self.train_dataloader")
+                elif self.train_dataloader.sampler is None:
+                    not_setup_sampler("train_dataloader")
+                else:
+                    setup_completed("train_dataloader")
+                # valid_dataloader
+                if self.valid_dataloader is None:
+                    raise ValueError("In the train-valid mode,the fn: setup_dataloaders() must Register and initialize self.valid_dataloader")
+                elif self.valid_dataloader.sampler is None:
+                    not_setup_sampler("valid_dataloader")
+                else:
+                    setup_completed("valid_dataloader")
+            # test mode
+            elif self.run_mode == 'test':
+                # test_dataloader
+                if self.test_dataloader is None:
+                    raise ValueError("In the test mode,the fn: setup_dataloaders() must Register and initialize self.test_dataloader")
+                elif self.test_dataloader.sampler is None:
+                    not_setup_sampler("test_dataloader")
+                else:
+                    setup_completed("test_dataloader")
+
+        except Exception as e:
+            setup_failed("data_loaders")
             raise e
         # 初始化优化器
         try:
@@ -372,39 +405,7 @@ class DistributedTrainer(ABC):
         except Exception as e:
             setup_failed("scaler")
             raise e
-        # 初始化dataloader
-        try:
-            self.setup_dataloaders()
-            not_setup_sampler = lambda loader: self.log(f"{loader}初始化完成,但{loader}.sampler 未初始化", level="warning")
-            # train-valid mode
-            if self.run_mode == 'train-valid':
-                # train_dataloader
-                if self.train_dataloader is None:
-                    raise ValueError("In the train-valid mode,the fn: setup_dataloaders() must Register and initialize self.train_dataloader")
-                elif self.train_dataloader.sampler is None:
-                    not_setup_sampler("train_dataloader")
-                else:
-                    setup_completed("train_dataloader")
-                # valid_dataloader
-                if self.valid_dataloader is None:
-                    raise ValueError("In the train-valid mode,the fn: setup_dataloaders() must Register and initialize self.valid_dataloader")
-                elif self.valid_dataloader.sampler is None:
-                    not_setup_sampler("valid_dataloader")
-                else:
-                    setup_completed("valid_dataloader")
-            # test mode
-            elif self.run_mode == 'test':
-                # test_dataloader
-                if self.test_dataloader is None:
-                    raise ValueError("In the test mode,the fn: setup_dataloaders() must Register and initialize self.test_dataloader")
-                elif self.test_dataloader.sampler is None:
-                    not_setup_sampler("test_dataloader")
-                else:
-                    setup_completed("test_dataloader")
-
-        except Exception as e:
-            setup_failed("data_loaders")
-            raise e
+        self.hook_after_setup()
 
     @abstractmethod
     def hook_after_setup(self):
