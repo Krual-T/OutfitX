@@ -1,6 +1,8 @@
 import json
 import pathlib
 from typing import Literal
+
+from src.models.datatypes import OutfitCompatibilityPredictionTask
 from src.project_settings.info import PROJECT_DIR as ROOT_DIR
 from .polyvore_item_dataset import PolyvoreItemDataset
 
@@ -30,7 +32,9 @@ class PolyvoreCompatibilityDataset(PolyvoreItemDataset):
 
     def __getitem__(self, index):
         label = self.cp_dataset[index]['label']
-        query = [
-            self._get_item_by_id(item_id) for item_id in self.cp_dataset[index]['question']
-        ]
+        query = OutfitCompatibilityPredictionTask(
+            outfit=[
+                self.get_item(item_id) for item_id in self.cp_dataset[index]['question']
+            ]
+        )
         return query, label
