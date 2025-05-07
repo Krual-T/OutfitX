@@ -2,10 +2,11 @@ import pickle
 import time
 import numpy as np
 import torch
+from sklearn.metrics import roc_auc_score
 
 from torch import nn
 from typing import Optional, Literal, cast
-from torch.cpu.amp import autocast
+from torch.amp import autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.utils.data.distributed import DistributedSampler
@@ -33,6 +34,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         self.recall_metric:BinaryRecall = None
         self.f1_metric:BinaryF1Score = None
         self.accuracy_metric:BinaryAccuracy = None
+        self.device_type = None
         self.best_metrics = {
             'AUC': 0.0,
             'Precision': 0.0,
@@ -45,11 +47,10 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
     def train_epoch(self, epoch: int) -> None:
         # 记录epoch开始时间
         epoch_start_time = time.time()
-
         self.model.train()
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
-        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
+        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
         local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
         local_y_hats = []
@@ -64,17 +65,18 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     device=self.local_rank
                 )
 
-                with autocast(enabled=self.cfg.use_amp):
-                    y_hats = self.model(queries)
+                with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
+                    y_hats = self.model(queries).squeeze(dim=-1)
                     loss = self.loss(y_hat=y_hats, y_true=labels)
-                    original_loss = loss.detach()
+                    original_loss = loss.clone().detach()
                     loss = loss / self.cfg.accumulation_steps
 
                 self.scaler.scale(loss).backward()
-                self.scaler.unscale_(self.optimizer)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
                 if (step + 1) % self.cfg.accumulation_steps == 0:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                     self.optimizer.zero_grad()
@@ -82,7 +84,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
                 batch_end_time = time.time()
                 local_batch_time = torch.tensor(batch_end_time - batch_start_time, device=self.local_rank, dtype=torch.float32)
-            dist.barrier()
+            if self.world_size > 1:
+                dist.barrier()
             metrics = self.build_metrics(
                     local_y_hats=y_hats.detach(),
                     local_labels=labels.detach(),
@@ -115,7 +118,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         local_labels = torch.cat(local_labels, dim=0)
         # 记录epoch结束时间
         epoch_end_time = time.time()
-        dist.barrier()
+        if self.world_size > 1:
+            dist.barrier()
 
         # 计算epoch耗时
         local_epoch_time = torch.tensor(epoch_end_time - epoch_start_time, device=self.local_rank, dtype=torch.float32)
@@ -134,7 +138,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         }
         self.log(
             level='info',
-            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} -->Train End \n {str(metrics)}",
+            msg=f"Epoch {epoch}/{self.cfg.n_epochs} -->Train End \n {str(metrics)}",
             metrics=metrics
         )
 
@@ -143,7 +147,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         # 记录epoch开始时间
         epoch_start_time = time.time()
         self.model.eval()
-        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
+        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
         local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
         local_y_hats = []
         local_labels = []
@@ -156,14 +160,15 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     dtype=torch.float32,
                     device=self.local_rank
                 )
-                with autocast(enabled=self.cfg.use_amp):
-                    y_hats = self.model(queries)
+                with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
+                    y_hats = self.model(queries).squeeze(dim=-1)
                     loss = self.loss(y_hat=y_hats, y_true=labels)
-                    original_loss = loss.detach()
+                    original_loss = loss.clone().detach()
 
                 batch_end_time = time.time()
                 local_batch_time = torch.tensor(batch_end_time - batch_start_time, device=self.local_rank, dtype=torch.float32)
-            dist.barrier()
+            if self.world_size > 1:
+                dist.barrier()
             metrics = self.build_metrics(
                     local_y_hats=y_hats.detach(),
                     local_labels=labels.detach(),
@@ -173,7 +178,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             )
             metrics = {f'valid/batch/{k}': v for k, v in metrics.items()}
             metrics = {
-                'batch_step': epoch * len(self.train_dataloader) + step,
+                'batch_step': epoch * len(self.valid_dataloader) + step,
                 **metrics
             }
             self.log(
@@ -201,7 +206,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             local_labels=local_labels,
             local_loss=local_total_loss,
             local_time=local_epoch_time,
-            batch_count=len(self.train_dataloader),
+            batch_count=len(self.valid_dataloader),
             epoch=epoch
         )
 
@@ -214,13 +219,13 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         }
         self.log(
             level='info',
-            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> Valid End \n\n {str(metrics)} \n",
+            msg=f"Epoch {epoch}/{self.cfg.n_epochs} --> Valid End \n\n {str(metrics)} \n",
             metrics=metrics
         )
 
     @torch.no_grad()
     def test(self):
-        ckpt_path = "CP_best.pth"
+        ckpt_path = self.cfg.checkpoint_dir / 'best_AUC.pth'
         self.load_checkpoint(ckpt_path=ckpt_path, only_load_model=True)
         self.model.eval()
         test_processor = tqdm(self.test_dataloader, desc='[Test] Compatibility Prediction')
@@ -232,22 +237,22 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                 dtype=torch.float32,
                 device=self.local_rank
             )
-            with autocast(enabled=self.cfg.use_amp):
-                y_hats = self.model(queries)
+            with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
+                y_hats = self.model(queries).squeeze(dim=-1)
             all_y_hats.append(y_hats.detach())
             all_labels.append(labels.detach())
-            metrics = self.compute_cp_metrics(y_hats=all_y_hats[-1], labels=all_labels[-1])
-            metrics = {f'test/batch/{k}': v for k, v in metrics.items()}
-            metrics = {
-                'batch_step': step,
-                **metrics
-            }
-            self.log(
-                level='info',
-                msg=str(metrics),
-                metrics=metrics
-            )
-            test_processor.set_postfix(**metrics)
+            # metrics = self.compute_cp_metrics(y_hats=all_y_hats[-1], labels=all_labels[-1])
+            # metrics = {f'test/batch/{k}': v for k, v in metrics.items()}
+            # metrics = {
+            #     'batch_step': step,
+            #     **metrics
+            # }
+            # self.log(
+            #     level='info',
+            #     msg=str(metrics),
+            #     metrics=metrics
+            # )
+            # test_processor.set_postfix(**metrics)
 
         all_y_hats = torch.cat(all_y_hats, dim=0)
         all_labels = torch.cat(all_labels, dim=0)
@@ -262,10 +267,11 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
     def setup_train_and_valid_dataloader(self):
         item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
-        collate_fn = lambda batch:(
+        collate_fn = lambda batch: (
             [item[0] for item in batch],
             [item[1] for item in batch]
         )
+
         train_dataset = PolyvoreCompatibilityDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='train',
@@ -273,21 +279,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             embedding_dict=item_embeddings,
             load_image=self.cfg.load_image
         )
-        train_sampler = DistributedSampler(
-            dataset=train_dataset,
-            num_replicas=self.world_size,
-            rank=self.rank,
-            shuffle=True,
-            drop_last=True
-        )
-        self.train_dataloader = DataLoader(
-            dataset=train_dataset,
-            batch_size=self.cfg.batch_size,
-            sampler=train_sampler,
-            num_workers=self.cfg.dataloader_workers,
-            pin_memory=True,
-            collate_fn=collate_fn
-        )
+
         valid_dataset = PolyvoreCompatibilityDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='valid',
@@ -295,16 +287,43 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             embedding_dict=item_embeddings,
             load_image=self.cfg.load_image
         )
-        valid_sampler = DistributedSampler(
-            dataset=valid_dataset,
-            num_replicas=self.world_size,
-            rank=self.rank,
-            shuffle=False,
-            drop_last=False
+
+        # ✅ 根据是否分布式，动态选择 sampler
+        if self.world_size > 1:
+            train_sampler = DistributedSampler(
+                dataset=train_dataset,
+                num_replicas=self.world_size,
+                rank=self.rank,
+                shuffle=True,
+                drop_last=True
+            )
+            valid_sampler = DistributedSampler(
+                dataset=valid_dataset,
+                num_replicas=self.world_size,
+                rank=self.rank,
+                shuffle=False,  # 🚀 建议验证集也shuffle
+                drop_last=False
+            )
+            shuffle_flag = False  # 有 sampler 时，不要再设置 shuffle
+        else:
+            train_sampler = None
+            valid_sampler = None
+            shuffle_flag = True
+
+        self.train_dataloader = DataLoader(
+            dataset=train_dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=shuffle_flag if train_sampler is None else False,
+            sampler=train_sampler,
+            num_workers=self.cfg.dataloader_workers,
+            pin_memory=True,
+            collate_fn=collate_fn
         )
+
         self.valid_dataloader = DataLoader(
             dataset=valid_dataset,
             batch_size=self.cfg.batch_size,
+            shuffle=True,
             sampler=valid_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
@@ -339,6 +358,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         self.recall_metric = BinaryRecall().to(self.local_rank)
         self.f1_metric = BinaryF1Score().to(self.local_rank)
         self.accuracy_metric = BinaryAccuracy().to(self.local_rank)
+        self.device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
         if self.world_size >1 and self.run_mode == 'test':
             raise ValueError("测试模式下不支持分布式")
 
@@ -365,8 +385,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                 all_ids.extend(data['ids'])
                 all_embeddings.append(data['embeddings'])
 
-        merged_embeddings = np.concatenate(all_embeddings, axis=0)
-        return {'ids': all_ids, 'embeddings': merged_embeddings}
+        all_embeddings = np.concatenate(all_embeddings, axis=0)
+        return {item_id: embedding for item_id, embedding in zip(all_ids, all_embeddings)}
 
     def load_optimizer(self) -> torch.optim.Optimizer:
         return torch.optim.AdamW(self.model.parameters(), lr=self.cfg.learning_rate)
@@ -387,7 +407,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         return torch.amp.GradScaler()
 
     def load_loss(self):
-        return FocalLoss(alpha=0.5, gamma=2, reduction='mean')
+        return FocalLoss(alpha=0.75, gamma=2, reduction='mean')
 
     def build_metrics(
         self,
@@ -407,16 +427,29 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
             all_loss = [torch.empty_like(local_loss) for _ in range(self.world_size)]
             all_time = [torch.empty_like(local_time) for _ in range(self.world_size)]
-        # maybe use all_gather_into_tensor ?
-        dist.all_gather(all_y_hats, local_y_hats)
-        dist.all_gather(all_labels, local_labels)
-        dist.all_gather(all_loss, local_loss)
-        dist.all_gather(all_time, local_time)
+        if self.world_size > 1:
+            dist.all_gather(all_y_hats, local_y_hats)
+            dist.all_gather(all_labels, local_labels)
+            dist.all_gather(all_loss, local_loss)
+            dist.all_gather(all_time, local_time)
+        else:
+            all_y_hats[0] = local_y_hats
+            all_labels[0] = local_labels
+            all_loss[0] = local_loss
+            all_time[0] = local_time
 
         all_y_hats = torch.cat(all_y_hats, dim=0)
         all_labels = torch.cat(all_labels, dim=0)
-        all_loss = torch.cat(all_loss, dim=0).mean()/batch_count
-        all_time = torch.cat(all_time, dim=0).mean()
+        all_loss = torch.stack(all_loss).mean()/batch_count
+        all_time = torch.stack(all_time).mean()
+
+        if batch_count > 1:
+            # 🔍 输出 label 分布情况
+            label_values = all_labels.int().cpu().numpy()
+            num_zeros = np.sum(label_values == 0)
+            num_ones = np.sum(label_values == 1)
+            total = len(label_values)
+            print(f"\n🌟 当前标签分布：0 -> {num_zeros} ({num_zeros / total:.2%}), 1 -> {num_ones} ({num_ones / total:.2%})")
 
         metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
         return {
@@ -424,33 +457,97 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             'time': all_time.item(),
             **metrics
         }
-
     def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
+        # 确保在 CPU 上处理 numpy 运算
+        probs = torch.sigmoid(y_hats.float()).detach().cpu()
+        labels = labels.int().detach().cpu()
+        predictions = probs.clone()
 
-        # 确保输入在同一个设备上
-        y_hats = y_hats.to(self.local_rank)
-        labels = labels.to(self.local_rank)
+        # 🎯 AUC 单独计算（注意要做异常判断）
+        auc = roc_auc_score(labels.numpy(), predictions.numpy()) if len(torch.unique(labels)) > 1 else 0.0
 
-        # AUC 需要概率
-        auc = self.auroc_metric(y_hats, labels)
+        # 🎯 离散化概率 -> 二值预测
+        predictions = (predictions > 0.5).int()
 
-        # 其他指标需要离散分类
-        pred_labels = (y_hats > 0.5).int()
+        # 🎯 手动统计 TP / FP / FN
+        tp = torch.sum((predictions == 1) & (labels == 1)).item()
+        fp = torch.sum((predictions == 1) & (labels == 0)).item()
+        fn = torch.sum((predictions == 0) & (labels == 1)).item()
 
-        # Precision, Recall, F1, Accuracy
-        precision = self.precision_metric(pred_labels, labels)
-        recall = self.recall_metric(pred_labels, labels)
-        f1 = self.f1_metric(pred_labels, labels)
-        accuracy = self.accuracy_metric(pred_labels, labels)
+        # 🎯 计算指标
+        accuracy = torch.mean((predictions == labels).float()).item()
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
-        # 转为 Python float 方便日志或 JSON 输出
+        # 🌟 输出概率分布，协助诊断
+        if torch.distributed.get_rank() == 0:
+            print("\n[🎯 预测概率区间统计]")
+            print(f"  <=0.2     : {(probs <= 0.2).sum().item()}")
+            print(f"  0.2~0.3   : {((probs > 0.2) & (probs <= 0.3)).sum().item()}")
+            print(f"  0.3~0.4   : {((probs > 0.3) & (probs <= 0.4)).sum().item()}")
+            print(f"  0.4~0.5   : {((probs > 0.4) & (probs <= 0.5)).sum().item()}")
+            print(f"  >0.5      : {(probs > 0.5).sum().item()}")
+
+        # ✅ 返回最终结果（键名保持一致性）
         return {
-            'Accuracy': accuracy.item(),
-            'Precision': precision.item(),
-            'Recall': recall.item(),
-            'F1': f1.item(),
-            'AUC': auc.item()
+            'Accuracy': accuracy,
+            'Precision': precision,
+            'Recall': recall,
+            'F1': f1,
+            'AUC': auc
         }
+    # def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
+    #     # 重置 metric 状态，避免跨 epoch 累积污染
+    #     self.auroc_metric.reset()
+    #     self.precision_metric.reset()
+    #     self.recall_metric.reset()
+    #     self.f1_metric.reset()
+    #     self.accuracy_metric.reset()
+    #
+    #     # 确保输入在同一设备
+    #     y_hats = y_hats.to(self.local_rank)
+    #     labels = labels.to(self.local_rank)
+    #
+    #     # ✅ 1. 准备好不同任务需要的格式
+    #     # 概率输出（用于 AUC）
+    #     probs = torch.sigmoid(y_hats.float())  # logits → probability
+    #
+    #     # 离散预测（用于 F1、Recall 等）
+    #     preds = (probs > 0.5).int()
+    #
+    #     # 标签必须是 int（不能是 float），否则 torchmetrics 会行为异常
+    #     labels_int = labels.int()
+    #     if torch.distributed.get_rank() == 0:
+    #         bins = [0.2, 0.3, 0.4, 0.5]
+    #         count_0_0_2 = (probs <= 0.2).sum().item()
+    #         count_0_2_0_3 = ((probs > 0.2) & (probs <= 0.3)).sum().item()
+    #         count_0_3_0_4 = ((probs > 0.3) & (probs <= 0.4)).sum().item()
+    #         count_0_4_0_5 = ((probs > 0.4) & (probs <= 0.5)).sum().item()
+    #         count_above_0_5 = (probs > 0.5).sum().item()
+    #
+    #         print(f"[🔍 Prediction Probability Distribution]")
+    #         print(f"  <=0.2     : {count_0_0_2}")
+    #         print(f"  0.2~0.3   : {count_0_2_0_3}")
+    #         print(f"  0.3~0.4   : {count_0_3_0_4}")
+    #         print(f"  0.4~0.5   : {count_0_4_0_5}")
+    #         print(f"  >0.5      : {count_above_0_5}")
+    #
+    #     # ✅ 2. 计算各类指标
+    #     auc = self.auroc_metric(probs, labels_int)
+    #     precision = self.precision_metric(preds, labels_int)
+    #     recall = self.recall_metric(preds, labels_int)
+    #     f1 = self.f1_metric(preds, labels_int)
+    #     accuracy = self.accuracy_metric(preds, labels_int)
+    #
+    #     # ✅ 3. 转为 Python float，方便 wandb / JSON 等记录
+    #     return {
+    #         'Accuracy': accuracy.item(),
+    #         'Precision': precision.item(),
+    #         'Recall': recall.item(),
+    #         'F1': f1.item(),
+    #         'AUC': auc.item()
+    #     }
 
     def maybe_save_best_models(self, metrics: dict, epoch: int):
         for metric_name, best_value in self.best_metrics.items():
