@@ -7,7 +7,7 @@ from .base_train_config import BaseTrainConfig
 @dataclass
 class CompatibilityPredictionTrainConfig(BaseTrainConfig):
     find_unused_parameters = True
-    batch_size: int = 512
+    batch_size: int = 4096
     dataloader_workers: int = 4
     polyvore_type: Literal['nondisjoint', 'disjoint'] = 'nondisjoint'
     name: str = 'compatibility_prediction'
