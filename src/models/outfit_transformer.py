@@ -45,7 +45,7 @@ class OutfitTransformer(nn.Module):
         self.cp_ffn = nn.Sequential(
             nn.Dropout(self.cfg.transformer.dropout),
             nn.Linear(self.item_encoder.d_embed, 1),
-            nn.Sigmoid()
+            # nn.Sigmoid()
         )
 
         ## 3 '互补项检索'(Complementary Item Retrieval,CIR)
@@ -106,7 +106,7 @@ class OutfitTransformer(nn.Module):
 
     def _cp_forward(self,
         cp_queries: List[OutfitCompatibilityPredictionTask],
-        use_precomputed_embedding: bool = False
+        use_precomputed_embedding: bool = True
      )->torch.Tensor:
         embeddings,mask = self._get_embeddings_and_padding_masks(cp_queries, use_precomputed_embedding)
         transformer_inputs = torch.cat([
@@ -128,7 +128,7 @@ class OutfitTransformer(nn.Module):
 
     def _cir_forward(self,
         cir_queries: List[OutfitComplementaryItemRetrievalTask],
-        use_precomputed_embedding: bool = False
+        use_precomputed_embedding: bool = True
     )->torch.Tensor:
         for query in cir_queries:
             query.target_item.image = self.image_pad
