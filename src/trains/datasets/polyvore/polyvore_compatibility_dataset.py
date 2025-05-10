@@ -7,7 +7,7 @@ from src.project_settings.info import PROJECT_DIR as ROOT_DIR
 from .polyvore_item_dataset import PolyvoreItemDataset
 
 
-class PolyvoreCompatibilityDataset(PolyvoreItemDataset):
+class PolyvoreCompatibilityPredictionDataset(PolyvoreItemDataset):
     def __init__(
         self,
         polyvore_type:Literal['nondisjoint', 'disjoint'] = 'nondisjoint',
