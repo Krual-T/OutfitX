@@ -67,7 +67,7 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
         items = [
             self.get_item(item_id=item_id) for item_id in item_ids
         ]
-        random_idx = None
+        random_idx = random.randrange(len(items))
         positive_item_id = items.pop(random_idx).item_id
         negative_item_ids = self.__get_negative_sample(positive_item_id)
 
