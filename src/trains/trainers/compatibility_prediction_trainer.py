@@ -16,7 +16,7 @@ from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
 from src.trains.configs.compatibility_prediction_train_config import CompatibilityPredictionTrainConfig
 from src.trains.datasets import PolyvoreItemDataset
-from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityDataset
+from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityPredictionDataset
 from src.trains.trainers.distributed_trainer import DistributedTrainer
 from torchmetrics.classification import BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryF1Score, BinaryAccuracy
 
@@ -272,7 +272,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             [item[1] for item in batch]
         )
 
-        train_dataset = PolyvoreCompatibilityDataset(
+        train_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='train',
             dataset_dir=self.cfg.dataset_dir,
@@ -280,7 +280,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             load_image=self.cfg.load_image
         )
 
-        valid_dataset = PolyvoreCompatibilityDataset(
+        valid_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='valid',
             dataset_dir=self.cfg.dataset_dir,
@@ -336,7 +336,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             [item[0] for item in batch],
             [item[1] for item in batch]
         )
-        test_dataset = PolyvoreCompatibilityDataset(
+        test_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='test',
             dataset_dir=self.cfg.dataset_dir,

@@ -1,2 +1,3 @@
 from .precompute_embedding_script import PrecomputeEmbeddingScript
 from .compatibility_prediction_trainer import CompatibilityPredictionTrainer
+from .complementary_item_retrieval_trainer import ComplementaryItemRetrievalTrainer

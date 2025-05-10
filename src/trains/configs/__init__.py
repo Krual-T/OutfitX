@@ -1,2 +1,4 @@
 from .precompute_embedding_config import PrecomputeEmbeddingConfig
 from .base_train_config import BaseTrainConfig
+from .compatibility_prediction_train_config import CompatibilityPredictionTrainConfig
+from .complementary_item_retrieval_train_config import ComplementaryItemRetrievalTrainConfig
