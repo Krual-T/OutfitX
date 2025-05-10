@@ -10,7 +10,7 @@ class PolyvoreItemDataset(Dataset):
     embed_file_prefix = 'embedding_subset_'
     def __init__(
             self,
-            dataset_dir: str,
+            dataset_dir: pathlib.Path,
             metadata: dict = None,
             embedding_dict: dict = None,
             load_image: bool = False
