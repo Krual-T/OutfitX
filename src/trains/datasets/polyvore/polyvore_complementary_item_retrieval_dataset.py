@@ -71,8 +71,11 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
         positive_item_id = items.pop(random_idx).item_id
         negative_item_ids = self.__get_negative_sample(positive_item_id)
 
+        outfit = items
+        random.shuffle(outfit)
+
         query: OutfitComplementaryItemRetrievalTask = OutfitComplementaryItemRetrievalTask(
-            outfit=items,
+            outfit=outfit,
             target_item=self.get_item(positive_item_id)
         )
         positive_item_embedding = self.embedding_dict[positive_item_id]
