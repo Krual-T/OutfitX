@@ -168,6 +168,9 @@ class Test(TestCase):
         analyze_semantic_categories(metadata_path)
 
     def test_test_dataset(self):
+        """
+        结论：test中的大类全部小于3000
+        """
         dataset_dir = ROOT_DIR / 'datasets' / 'polyvore'
         metadata_path = dataset_dir / "item_metadata.json"
         test_path = dataset_dir / "nondisjoint" / "test.json"
@@ -176,48 +179,31 @@ class Test(TestCase):
 
         # ✅加载 metadata
         with open(metadata_path, "r", encoding="utf-8") as f:
-            metadata_raw = json.load(f)
-            metadata = {item["item_id"]: item for item in metadata_raw}
+            raw_list = json.load(f)
+            metadata = {item["item_id"]: item for item in raw_list}
 
-        # ✅映射 item_id → category_id
-        item_to_category = {
-            item_id: item.get(CATEGORY_KEY) for item_id, item in metadata.items()
-        }
-
-        # ✅找出大类类别
-        category_counts = Counter(item_to_category.values())
-        large_categories = {cat for cat, count in category_counts.items() if count >= THRESHOLD}
-
-        # ✅加载 test outfit
+        # ✅加载 test outfits
         with open(test_path, "r", encoding="utf-8") as f:
             test_outfits = json.load(f)
 
-        valid, invalid = 0, 0
-        invalid_examples = []
+        # ✅统计每个类别的全局数量，选出大类
+        category_counts = Counter(item[CATEGORY_KEY] for item in metadata.values())
+        large_categories = {cat for cat, count in category_counts.items() if count >= THRESHOLD}
 
-        # ✅检查每个 outfit 是否至少包含一个大类
-        for outfit in test_outfits:
-            item_ids = outfit["item_ids"]
-            categories = [item_to_category.get(iid) for iid in item_ids]
-            if any(cat in large_categories for cat in categories if cat is not None):
-                valid += 1
-            else:
-                invalid += 1
-                if len(invalid_examples) < 5:
-                    invalid_examples.append({
-                        "item_ids": item_ids,
-                        "categories": categories
-                    })
+        # ✅统计 test 中大类的数量
+        test_item_ids = {iid for outfit in test_outfits for iid in outfit["item_ids"]}
+        test_category_counter = Counter()
 
-        # ✅输出结果
-        print("\n📊 CIR Outfit 合法性检查（是否包含至少一个大类）")
-        print(f"总 outfit 数量         : {len(test_outfits)}")
-        print(f"✅ 包含大类的 outfit    : {valid}")
-        print(f"❌ 全是小类的 outfit    : {invalid}")
+        for iid in test_item_ids:
+            cid = metadata.get(iid, {}).get(CATEGORY_KEY)
+            if cid in large_categories:
+                test_category_counter[cid] += 1
 
-        print("\n🧪 前 5 个全小类 outfit 示例：")
-        for i, example in enumerate(invalid_examples, 1):
-            print(f"\n示例 {i}:")
-            for iid, cat in zip(example["item_ids"], example["categories"]):
-                tag = "✅" if cat in large_categories else "❌"
-                print(f" - {iid} → 类别 {cat} {tag}")
+        # ✅输出
+        print(f"\n📊 Test 中大类分布（超过 3000？）")
+        print(f"{'Category ID':>12s} | {'Test Count':>10s} | {'Needs Fill':>10s}")
+        print("-" * 40)
+        for cid in sorted(large_categories, key=lambda x: -test_category_counter[x]):
+            count = test_category_counter[cid]
+            need_fill = "❌ No" if count >= THRESHOLD else "✅ Yes"
+            print(f"{cid:>12} | {count:>10} | {need_fill:>10}")
