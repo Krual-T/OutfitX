@@ -170,13 +170,11 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         top_k_list = [1, 5, 10, 15, 30, 50]
         all_y_hats = []
         all_pos_item_ids = []
-        for step, (queries, pos_item_, neg_items_emb_tensors) in enumerate(test_processor):
-            y = pos_item_['embeddings']
+        for step, (queries, pos_item_ids) in enumerate(test_processor):
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
                 y_hats = self.model(queries)
-
             all_y_hats.append(y_hats.clone().detach())
-            all_pos_item_ids.extend(pos_item_['ids'])
+            all_pos_item_ids.extend(pos_item_ids)
 
         all_y_hats = torch.cat(all_y_hats, dim=0)
         metrics = self.compute_recall_metrics(
@@ -337,33 +335,10 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
 
     def setup_test_dataloader(self):
         def collate_fn(batch):
-            query_iter, neg_items_emb_iter = zip(*batch)
+            query_iter,_ = zip(*batch)
             queries = [query for query in query_iter]
-            pos_item_ = {
-                'ids':[
-                    query.target_item.item_id for query in queries
-                ],
-                'embeddings':torch.stack([
-                    torch.tensor(
-                        query.target_item.embedding,
-                        dtype=torch.float,
-                        device=self.local_rank
-                    )
-                    for query in queries
-                ])
-            }
-            neg_items_emb_tensors = torch.stack([
-                torch.stack([
-                    torch.tensor(
-                        item_emb,
-                        dtype=torch.float,
-                        device=self.local_rank
-                    )
-                    for item_emb in neg_items_emb
-                ])
-                for neg_items_emb in neg_items_emb_iter
-            ])
-            return queries,pos_item_, neg_items_emb_tensors
+            pos_item_ids = [query.target_item.item_id for query in queries]
+            return queries,pos_item_ids
         item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
         test_dataset = PolyvoreComplementaryItemRetrievalDataset(
             polyvore_type=self.cfg.polyvore_type,
