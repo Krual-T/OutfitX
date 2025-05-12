@@ -333,7 +333,7 @@ class DistributedTrainer(ABC):
                 setup_completed("loss")
             elif self.run_mode == 'train-valid':
                 raise ValueError("In the train-valid mode,the fn: load_loss() must return a loss(nn.moudle)")
-            elif self.run_mode == 'custom':
+            elif self.run_mode != 'test':
                 not_setup("loss")
         except Exception as e:
             setup_failed("loss")
