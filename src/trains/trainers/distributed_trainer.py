@@ -365,8 +365,7 @@ class DistributedTrainer(ABC):
                     raise ValueError("In the test mode,the fn: setup_dataloaders() must Register and initialize self.test_dataloader")
                 elif self.test_dataloader.sampler is None:
                     not_setup_sampler("test_dataloader")
-                else:
-                    setup_completed("test_dataloader")
+                setup_completed("test_dataloader")
 
         except Exception as e:
             setup_failed("data_loaders")
