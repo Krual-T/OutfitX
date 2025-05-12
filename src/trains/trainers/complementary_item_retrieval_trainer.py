@@ -32,9 +32,9 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         self.optimizer.zero_grad()
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
         for step,(queries, pos_item_, neg_items_emb_tensors) in enumerate(train_processor):
+            y = pos_item_['embeddings']
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(queries)
-                y = pos_item_['embeddings']
                 loss = self.loss(
                     batch_answer=y,
                     batch_negative_samples=neg_items_emb_tensors,
@@ -80,9 +80,9 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         all_y_hats = []
         all_pos_item_ids = []
         for step,(queries,pos_item_,neg_items_emb_tensors) in enumerate(valid_processor):
+            y = pos_item_['embeddings']
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(queries)
-                y = pos_item_['embeddings']
                 loss = self.loss(
                     batch_answer=y,
                     batch_negative_samples=neg_items_emb_tensors,
@@ -108,7 +108,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 msg=str(metrics),
                 metrics=metrics
             )
-            all_y_hats.append(y_hats)
+            all_y_hats.append(y_hats.clone().detach())
             all_pos_item_ids.extend(pos_item_['ids'])
             valid_processor.set_postfix(**metrics)
 
@@ -163,8 +163,36 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             metrics[f"Recall@{k}"] = hits / y_hats.size(0)
         return metrics
 
+    @torch.no_grad()
     def test(self):
-        pass
+        self.model.eval()
+        test_processor = tqdm(self.test_dataloader, desc=f"Test")
+        top_k_list = [1, 5, 10, 15, 30, 50]
+        all_y_hats = []
+        all_pos_item_ids = []
+        for step, (queries, pos_item_, neg_items_emb_tensors) in enumerate(test_processor):
+            y = pos_item_['embeddings']
+            with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
+                y_hats = self.model(queries)
+
+            all_y_hats.append(y_hats.clone().detach())
+            all_pos_item_ids.extend(pos_item_['ids'])
+
+        all_y_hats = torch.cat(all_y_hats, dim=0)
+        metrics = self.compute_recall_metrics(
+                top_k_list=top_k_list,
+                dataloader=self.valid_dataloader,
+                y_hats=all_y_hats,
+                pos_item_ids=all_pos_item_ids
+            )
+        metrics = {
+            **{f'test/{k}': v for k, v in metrics.items()}
+        }
+        self.log(
+            level='info',
+            msg=str(metrics),
+            metrics=metrics
+        )
 
     def hook_after_setup(self):
         self.device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -308,30 +336,52 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         )
 
     def setup_test_dataloader(self):
-        # TODO 构建候选池：
-        #   - 将test的全部大类按类别放入候选池
-        #   - 使用train的大类对每个类别进行填充->3000
-        # item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
-        # test_dataset = PolyvoreComplementaryItemRetrievalDataset(
-        #     polyvore_type=self.cfg.polyvore_type,
-        #     mode='test',
-        #     embedding_dict=item_embeddings,
-        #     load_image=self.cfg.load_image,
-        #     dataset_dir=self.cfg.dataset_dir,
-        # )
-        # sampler = None
-        # self.test_dataloader = DataLoader(
-        #     dataset=test_dataset,
-        #     batch_size=self.cfg.batch_size,
-        #     shuffle=False,
-        #     sampler=sampler,
-        #     num_workers=self.cfg.dataloader_workers,
-        #     pin_memory=True,
-        #     collate_fn=collate_fn
-        # )
-        pass
-    def setup_custom_dataloader(self):
-        pass
+        def collate_fn(batch):
+            query_iter, neg_items_emb_iter = zip(*batch)
+            queries = [query for query in query_iter]
+            pos_item_ = {
+                'ids':[
+                    query.target_item.item_id for query in queries
+                ],
+                'embeddings':torch.stack([
+                    torch.tensor(
+                        query.target_item.embedding,
+                        dtype=torch.float,
+                        device=self.local_rank
+                    )
+                    for query in queries
+                ])
+            }
+            neg_items_emb_tensors = torch.stack([
+                torch.stack([
+                    torch.tensor(
+                        item_emb,
+                        dtype=torch.float,
+                        device=self.local_rank
+                    )
+                    for item_emb in neg_items_emb
+                ])
+                for neg_items_emb in neg_items_emb_iter
+            ])
+            return queries,pos_item_, neg_items_emb_tensors
+        item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
+        test_dataset = PolyvoreComplementaryItemRetrievalDataset(
+            polyvore_type=self.cfg.polyvore_type,
+            mode='test',
+            embedding_dict=item_embeddings,
+            load_image=self.cfg.load_image,
+            dataset_dir=self.cfg.dataset_dir,
+        )
+        sampler = None
+        self.test_dataloader = DataLoader(
+            dataset=test_dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=False,
+            sampler=sampler,
+            num_workers=self.cfg.dataloader_workers,
+            pin_memory=True,
+            collate_fn=collate_fn
+        )
 
     def load_loss(self):
         return SetWiseRankingLoss(margin=self.cfg.margin)
@@ -357,6 +407,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
 
         all_embeddings = np.concatenate(all_embeddings, axis=0)
         return {item_id: embedding for item_id, embedding in zip(all_ids, all_embeddings)}
-
     def custom_task(self, *args, **kwargs):
+        pass
+    def setup_custom_dataloader(self):
         pass
