@@ -59,13 +59,11 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
             outfit=[self.get_item(item_id) for item_id in item_ids],
             target_item=self.get_item(positive_item_id)
         )
-        # 获取 positive_item_embedding
-        positive_item_embedding = self.embedding_dict[positive_item_id]
         # 获取 negative_items_embedding
         negative_items_embedding = [
             self.embedding_dict[item_id] for item_id in negative_item_ids
         ]
-        return query, positive_item_embedding, negative_items_embedding
+        return query, negative_items_embedding
 
     def __load_split_dataset(self) -> List[dict]:
         path = self.dataset_dir / self.polyvore_type / f'{self.mode}.json'
