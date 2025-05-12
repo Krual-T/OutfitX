@@ -373,35 +373,36 @@ class DistributedTrainer(ABC):
             raise e
         # 初始化优化器
         try:
-            self.optimizer = self.load_optimizer()
-            if self.optimizer is not None:
+            if self.run_mode == 'train-valid':
+                self.optimizer = self.load_optimizer()
+                if self.optimizer is None:
+                    raise ValueError("In the train-valid mode,the fn: load_optimizer() must return an optimizer")
                 setup_completed("optimizer")
-            elif self.run_mode == 'train-valid':
-                raise ValueError("In the train-valid mode,the fn: load_optimizer() must return an optimizer")
-            elif self.run_mode == 'custom':
+            elif self.run_mode!= 'test':
                 not_setup("optimizer")
         except Exception as e:
             setup_failed("optimizer")
             raise e
         # 初始化学习率调节器
         try:
-            self.scheduler = self.load_scheduler()
-            if self.scheduler is not None:
+            if self.run_mode == 'train-valid':
+                self.scheduler = self.load_scheduler()
+                if self.scheduler is None:
+                    raise ValueError("In the train-valid mode,the fn: load_scheduler() must return a scheduler")
                 setup_completed("scheduler")
-            elif self.run_mode == 'train-valid':
-                raise ValueError("In the train-valid mode,the fn: load_scheduler() must return a scheduler")
-            elif self.run_mode == 'custom':
+            elif self.run_mode != 'test':
                 not_setup("scheduler")
         except Exception as e:
             setup_failed("scheduler")
             raise e
         # 初始化scaler
         try:
-            self.scaler = self.load_scaler()
-            if self.scaler is not None:
-                setup_completed("scaler")
-            elif self.run_mode != 'test':
-                not_setup("scaler")
+            if self.run_mode == 'train-valid':
+                self.scaler = self.load_scaler()
+                if self.scaler is not None:
+                    setup_completed("scaler")
+                elif self.run_mode != 'test':
+                    not_setup("scaler")
         except Exception as e:
             setup_failed("scaler")
             raise e
