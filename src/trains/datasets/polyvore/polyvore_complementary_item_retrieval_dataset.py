@@ -37,8 +37,8 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
         self.negative_sample_fine_grained = 'semantic_category' if negative_sample_mode == 'easy' else 'category_id'
         self.negative_sample_k = negative_sample_k
 
-        self.cir_dataset = self.__load_split_dataset()
         self.large_categories = self.__get_large_categories()
+        self.cir_dataset = self.__load_split_dataset()
         self.negative_pool = self.__build_negative_pool()
         self.candidate_pool = self.__build_candidate_pool() if self.mode == 'train' else {}
 
@@ -101,7 +101,7 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
     def __get_negative_sample(self, item_id) -> List[int]:
         k = self.negative_sample_k
-        pool = self.negative_pool.get(self.negative_sample_fine_grained, [])
+        pool = self.negative_pool.get(item_id, [])
         filtered = [x for x in pool if x != item_id]
         if len(filtered) < k:
             print(f"⚠️ 类别 {self.negative_sample_fine_grained} 负样本不足 {k} 个，仅有 {len(filtered)} 个")
