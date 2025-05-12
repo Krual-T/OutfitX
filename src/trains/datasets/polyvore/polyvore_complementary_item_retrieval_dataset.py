@@ -7,6 +7,7 @@ from typing import Literal, List, cast
 from unittest import TestCase
 
 import pandas as pd
+import torch
 
 from src.models.datatypes import FashionItem, OutfitComplementaryItemRetrievalTask
 from .polyvore_item_dataset import PolyvoreItemDataset
@@ -40,7 +41,7 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
         self.large_categories = self.__get_large_categories()
         self.cir_dataset = self.__load_split_dataset()
         self.negative_pool = self.__build_negative_pool()
-        self.candidate_pool = self.__build_candidate_pool() if self.mode == 'train' else {}
+        self.candidate_pools = self.__build_candidate_pool() if self.mode == 'train' else {}
 
 
     def __len__(self):
@@ -109,9 +110,7 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
         candidate_max_size = 3000
         candidate_pool = {}
 
-        split_item_ids = {item_id for sample in self.cir_dataset for item_id in sample["item_ids"]}
-
-        # 构建类别映射
+        split_item_ids = {iid for sample in self.cir_dataset for iid in sample["item_ids"]}
         category_to_all = defaultdict(list)
         category_to_split = defaultdict(set)
 
@@ -127,12 +126,25 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
             replenish = list(set(category_to_all[cid]) - set(used))
             random.shuffle(replenish)
             total = used + replenish[:max(0, candidate_max_size - len(used))]
-            if len(total) < candidate_max_size:
-                print(f"⚠️ 类别 {cid} 无法凑满 {candidate_max_size} 个，仅有 {len(total)} 个")
             total = total[:candidate_max_size]
             random.shuffle(total)
-            candidate_pool[cid] = total # 虽然检查过valid和test不可能大于3000，但是以防万一
-        print(f"✅ [{self.mode.upper()}] 候选池构建完毕，每类 {candidate_max_size} 个，共 {len(candidate_pool)} 类")
+
+            index_map = {item_id: idx for idx, item_id in enumerate(total)}
+
+            # ✅ embedding tensor
+            try:
+                embeddings = torch.stack([self.embedding_dict[item_id] for item_id in total])
+            except KeyError as e:
+                print(f"⚠️ embedding_dict 缺失 item_id: {e}")
+                raise e
+
+            candidate_pool[cid] = {
+                'item_ids': total,
+                'index': index_map,
+                'embeddings': embeddings  # shape: [3000, D]
+            }
+
+        print(f"✅ 候选池构建完毕：每类 {candidate_max_size} 个")
         return candidate_pool
 
 class Test(TestCase):
@@ -239,12 +251,10 @@ class Test(TestCase):
             print(f"类别 {cid}: {len(items)} items")
 
         # # ✅ 如有需要，可写入文件
-        # # with open("candidate_pool.json", "w", encoding="utf-8") as f:
-        # #     json.dump(candidate_pool, f, ensure_ascii=False, indent=2)
+        # # with open("candidate_pools.json", "w", encoding="utf-8") as f:
+        # #     json.dump(candidate_pools, f, ensure_ascii=False, indent=2)
         #
-        # return candidate_pool
-
-
+        # return candidate_pools
 
 class TestValidDataset(TestCase):
     def test_valid_dataset(self):
