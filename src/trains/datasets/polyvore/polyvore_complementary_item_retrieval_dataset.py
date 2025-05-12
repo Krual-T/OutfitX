@@ -1,12 +1,13 @@
 import pathlib
 import json
 import random
-from collections import Counter
+from collections import Counter, defaultdict
 
 from typing import Literal, List, cast
 from unittest import TestCase
 
 import pandas as pd
+import torch
 
 from src.models.datatypes import FashionItem, OutfitComplementaryItemRetrievalTask
 from .polyvore_item_dataset import PolyvoreItemDataset
@@ -31,72 +32,20 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
             embedding_dict=embedding_dict,
             load_image=load_image
         )
-        if mode == 'test':
-            large_category_threshold = 3000
-        else:
-            large_category_threshold = 0  # 训练/验证不过滤
-
-        # ✅ 构建 category_id → count 映射
-        category_counts = Counter()
-        for item in self.metadata.values():
-            cid = item.get("category_id")
-            if cid is not None:
-                category_counts[cid] += 1
-
-        # ✅ 提前确定大类类别集合 type:set[int]
-        self.large_categories = {
-            cat for cat, count in category_counts.items()
-            if count >= large_category_threshold
-        }
-
-        cir_dataset_path = dataset_dir / polyvore_type / f'{mode}.json'
-        with open(cir_dataset_path, 'r') as f:
-            raw_data = json.load(f)
-
-        self.cir_dataset = []
-        for outfit in raw_data:
-            item_ids = outfit["item_ids"]
-            positive_idx_list = [
-                index for index, item_id in enumerate(item_ids)
-                if (item_id in self.metadata) and (self.metadata[item_id]["category_id"] in self.large_categories)
-            ]
-            if positive_idx_list:
-                self.cir_dataset.append({
-                    "item_ids": item_ids,
-                    "positive_idx_list": positive_idx_list
-                })
-        self.negative_sample_mode = negative_sample_mode
+        self.polyvore_type = polyvore_type
+        self.mode = mode
+        self.large_category_threshold = 0 if mode == 'train' else 3000
+        self.negative_sample_fine_grained = 'semantic_category' if negative_sample_mode == 'easy' else 'category_id'
         self.negative_sample_k = negative_sample_k
+
+        self.large_categories = self.__get_large_categories()
+        self.cir_dataset = self.__load_split_dataset()
         self.negative_pool = self.__build_negative_pool()
+        self.candidate_pools = self.__build_candidate_pool() if self.mode == 'train' else {}
 
 
     def __len__(self):
         return len(self.cir_dataset)
-
-    def __build_negative_pool(self):
-        negative_pool = {}
-        for item in self.metadata.values():
-            fine_grained = "semantic_category" if self.negative_sample_mode == 'easy' else "category_id"
-            sample_key = item[fine_grained]
-            if sample_key not in negative_pool:
-                negative_pool[sample_key] = []
-            negative_pool[sample_key].append(item['item_id'])
-        return negative_pool
-
-    def __get_negative_sample(self, item_id) -> List[int]:
-        k = self.negative_sample_k
-        meta = self.metadata[item_id]
-        key = meta["semantic_category"] if self.negative_sample_mode == 'easy' else meta["category_id"]
-        pool = self.negative_pool.get(key)
-
-        if not pool:
-            print(f"⚠️ 类别 {key} 无负样本可采！")
-            return []
-
-        filtered = [x for x in pool if x != item_id]
-        if len(filtered) < k:
-            print(f"⚠️ 类别 {key} 负样本不足 {k} 个，仅有 {len(filtered)} 个")
-        return random.sample(filtered, k) if len(filtered) >= k else filtered
 
     def __getitem__(self, index):
         #获取 outfit positive negative的item_id
@@ -111,14 +60,92 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
             outfit=[self.get_item(item_id) for item_id in item_ids],
             target_item=self.get_item(positive_item_id)
         )
-        # 获取 positive_item_embedding
-        positive_item_embedding = self.embedding_dict[positive_item_id]
         # 获取 negative_items_embedding
         negative_items_embedding = [
             self.embedding_dict[item_id] for item_id in negative_item_ids
         ]
-        return query, positive_item_embedding, negative_items_embedding
+        return query, negative_items_embedding
 
+    def __load_split_dataset(self) -> List[dict]:
+        path = self.dataset_dir / self.polyvore_type / f'{self.mode}.json'
+        with open(path, 'r') as f:
+            raw_data = json.load(f)
+        result = []
+        for outfit in raw_data:
+            item_ids = outfit["item_ids"]
+            pos_idx_list = [
+                i for i, item_id in enumerate(item_ids)
+                if self.metadata[item_id]["category_id"] in self.large_categories
+            ]
+            if pos_idx_list:
+                result.append({
+                    "item_ids": item_ids,
+                    "positive_idx_list": pos_idx_list
+                })
+        return result
+
+    def __get_large_categories(self) -> set:
+        counts = Counter(
+            item["category_id"] for item in self.metadata.values() if "category_id" in item
+        )
+        return {cid for cid, count in counts.items() if count >= self.large_category_threshold}
+
+
+    def __build_negative_pool(self):
+        negative_pool = defaultdict(list)
+        for item in self.metadata.values():
+            sample_key = item[self.negative_sample_fine_grained]
+            negative_pool[sample_key].append(item['item_id'])
+        return negative_pool
+
+    def __get_negative_sample(self, item_id) -> List[int]:
+        k = self.negative_sample_k
+        pool = self.negative_pool.get(item_id, [])
+        filtered = [x for x in pool if x != item_id]
+        if len(filtered) < k:
+            print(f"⚠️ 类别 {self.negative_sample_fine_grained} 负样本不足 {k} 个，仅有 {len(filtered)} 个")
+        return random.sample(filtered, k) if len(filtered) >= k else filtered
+
+    def __build_candidate_pool(self) -> dict:
+        candidate_max_size = 3000
+        candidate_pool = {}
+
+        split_item_ids = {iid for sample in self.cir_dataset for iid in sample["item_ids"]}
+        category_to_all = defaultdict(list)
+        category_to_split = defaultdict(set)
+
+        for item_id, item in self.metadata.items():
+            cid = item.get("category_id")
+            if cid in self.large_categories:
+                category_to_all[cid].append(item_id)
+                if item_id in split_item_ids:
+                    category_to_split[cid].add(item_id)
+
+        for cid in self.large_categories:
+            used = list(category_to_split[cid])
+            replenish = list(set(category_to_all[cid]) - set(used))
+            random.shuffle(replenish)
+            total = used + replenish[:max(0, candidate_max_size - len(used))]
+            total = total[:candidate_max_size]
+            random.shuffle(total)
+
+            index_map = {item_id: idx for idx, item_id in enumerate(total)}
+
+            # ✅ embedding tensor
+            try:
+                embeddings = torch.stack([self.embedding_dict[item_id] for item_id in total])
+            except KeyError as e:
+                print(f"⚠️ embedding_dict 缺失 item_id: {e}")
+                raise e
+
+            candidate_pool[cid] = {
+                'item_ids': total,
+                'index': index_map,
+                'embeddings': embeddings  # shape: [3000, D]
+            }
+
+        print(f"✅ 候选池构建完毕：每类 {candidate_max_size} 个")
+        return candidate_pool
 
 class Test(TestCase):
     def test_check_semantic_category(self):
@@ -167,9 +194,204 @@ class Test(TestCase):
         metadata_path = ROOT_DIR / 'datasets' / 'polyvore' / 'item_metadata.json'
         analyze_semantic_categories(metadata_path)
 
+    def test_build_candidate_pool(self):
+        """
+        根据大类构建候选池：
+        - 每个大类包含 3000 个 item_ids
+        - 来自 valid.json 中已出现的 item_ids + metadata 中补充
+        """
+        dataset_dir = ROOT_DIR / 'datasets' / 'polyvore'
+        metadata_path = dataset_dir / "item_metadata.json"
+        valid_path = dataset_dir / "nondisjoint" / "valid.json"
+        CATEGORY_KEY = "category_id"
+        THRESHOLD = 3000
+        TARGET_SIZE = 3000
+
+        # ✅ 加载 metadata
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            raw_list = json.load(f)
+            metadata = {item["item_id"]: item for item in raw_list}
+
+        # ✅ 构建 category -> item_ids 映射
+        category_to_all_ids = defaultdict(list)
+        for item_id, item in metadata.items():
+            cid = item[CATEGORY_KEY]
+            category_to_all_ids[cid].append(item_id)
+
+        # ✅ 统计每个类别数量，选出大类
+        category_counts = Counter(item[CATEGORY_KEY] for item in metadata.values())
+        large_categories = {cat for cat, count in category_counts.items() if count >= THRESHOLD}
+
+        # ✅ 加载 valid 中出现的 item_ids
+        with open(valid_path, "r", encoding="utf-8") as f:
+            valid_outfits = json.load(f)
+        valid_item_ids = {item_id for outfit in valid_outfits for item_id in outfit["item_ids"]}
+
+        # ✅ 分类 valid 中的 item_ids 到各大类
+        category_to_valid_ids = defaultdict(set)
+        for item_id in valid_item_ids:
+            cid = metadata.get(item_id, {}).get(CATEGORY_KEY)
+            if cid in large_categories:
+                category_to_valid_ids[cid].add(item_id)
+
+        # ✅ 构建候选池
+        candidate_pool = dict()
+        for cid in large_categories:
+            valid_ids = list(category_to_valid_ids.get(cid, set()))
+            extra_ids = list(set(category_to_all_ids[cid]) - set(valid_ids))
+            random.shuffle(extra_ids)  # 随机补齐
+            total_ids = valid_ids + extra_ids[:max(0, TARGET_SIZE - len(valid_ids))]
+            if len(total_ids) < TARGET_SIZE:
+                print(f"⚠️ 类别 {cid} 无法凑满 {TARGET_SIZE} 个（仅 {len(total_ids)} 个）")
+            candidate_pool[cid] = total_ids[:TARGET_SIZE]  # 精确截断
+
+        # ✅ 输出统计
+        print("\n📦 候选池构建完毕（每类 3000 个 item_ids）")
+        for cid, items in candidate_pool.items():
+            print(f"类别 {cid}: {len(items)} items")
+
+        # # ✅ 如有需要，可写入文件
+        # # with open("candidate_pools.json", "w", encoding="utf-8") as f:
+        # #     json.dump(candidate_pools, f, ensure_ascii=False, indent=2)
+        #
+        # return candidate_pools
+
+class TestValidDataset(TestCase):
+    def test_valid_dataset(self):
+        """
+        问题：valid中的大类全部小于3000??
+        结论：yes
+        """
+        dataset_dir = ROOT_DIR / 'datasets' / 'polyvore'
+        metadata_path = dataset_dir / "item_metadata.json"
+        test_path = dataset_dir / "nondisjoint" / "valid.json"
+        CATEGORY_KEY = "category_id"
+        THRESHOLD = 3000
+
+        # ✅加载 metadata
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            raw_list = json.load(f)
+            metadata = {item["item_id"]: item for item in raw_list}
+
+        # ✅加载 test outfits
+        with open(test_path, "r", encoding="utf-8") as f:
+            test_outfits = json.load(f)
+
+        # ✅统计每个类别的全局数量，选出大类
+        category_counts = Counter(item[CATEGORY_KEY] for item in metadata.values())
+        large_categories = {cat for cat, count in category_counts.items() if count >= THRESHOLD}
+
+        # ✅统计 test 中大类的数量
+        test_item_ids = {item_id for outfit in test_outfits for item_id in outfit["item_ids"]}
+        test_category_counter = Counter()
+
+        for item_id in test_item_ids:
+            cid = metadata.get(item_id, {}).get(CATEGORY_KEY)
+            if cid in large_categories:
+                test_category_counter[cid] += 1
+
+        # ✅输出
+        print(f"\n📊 Valid 中大类分布（超过 3000？）")
+        print(f"{'Category ID':>12s} | {'Test Count':>10s} | {'Needs Fill':>10s}")
+        print("-" * 40)
+        for cid in sorted(large_categories, key=lambda x: -test_category_counter[x]):
+            count = test_category_counter[cid]
+            need_fill = "❌ No" if count >= THRESHOLD else "✅ Yes"
+            print(f"{cid:>12} | {count:>10} | {need_fill:>10}")
+
+    def test_outfit_contains_large_category(self):
+        """
+        测试 valid.json 中每个 outfit 的 item_ids 是否包含大类
+        输出包含大类的个数和完全不包含大类的个数
+        """
+        dataset_dir = ROOT_DIR / 'datasets' / 'polyvore'
+        metadata_path = dataset_dir / "item_metadata.json"
+        valid_path = dataset_dir / "nondisjoint" / "valid.json"
+        CATEGORY_KEY = "category_id"
+        THRESHOLD = 3000
+
+        # ✅加载 metadata
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            raw_list = json.load(f)
+            metadata = {item["item_id"]: item for item in raw_list}
+
+        # ✅加载 valid outfits
+        with open(valid_path, "r", encoding="utf-8") as f:
+            valid_outfits = json.load(f)
+
+        # ✅统计每个类别的全局数量，选出大类
+        category_counts = Counter(item[CATEGORY_KEY] for item in metadata.values())
+        large_categories = {cat for cat, count in category_counts.items() if count >= THRESHOLD}
+
+        # ✅统计每个 outfit 是否包含大类
+        contains_large_count = 0
+        not_contains_large_count = 0
+
+        for outfit in valid_outfits:
+            item_ids = outfit.get("item_ids", [])
+            has_large = False
+            for item_id in item_ids:
+                category_id = metadata.get(item_id, {}).get(CATEGORY_KEY)
+                if category_id in large_categories:
+                    has_large = True
+                    break
+            if has_large:
+                contains_large_count += 1
+            else:
+                not_contains_large_count += 1
+
+        # ✅输出
+        print("\n📊 Outfit 中是否包含大类统计")
+        print(f"✅ 至少包含一个大类的 outfit 数量：{contains_large_count}")
+        print(f"❌ 完全不包含大类的 outfit 数量：{not_contains_large_count}")
+
+    def test_valid_covers_all_large_categories(self):
+        """
+        检查 valid.json 是否覆盖了所有的大类（至少包含一个 item）
+        """
+        dataset_dir = ROOT_DIR / 'datasets' / 'polyvore'
+        metadata_path = dataset_dir / "item_metadata.json"
+        valid_path = dataset_dir / "nondisjoint" / "valid.json"
+        CATEGORY_KEY = "category_id"
+        THRESHOLD = 3000
+
+        # ✅ 加载 metadata
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            raw_list = json.load(f)
+            metadata = {item["item_id"]: item for item in raw_list}
+
+        # ✅ 统计大类
+        category_counts = Counter(item[CATEGORY_KEY] for item in metadata.values())
+        large_categories = {cat for cat, count in category_counts.items() if count >= THRESHOLD}
+
+        # ✅ 加载 valid item_ids
+        with open(valid_path, "r", encoding="utf-8") as f:
+            valid_outfits = json.load(f)
+        valid_item_ids = {item_id for outfit in valid_outfits for item_id in outfit["item_ids"]}
+
+        # ✅ 提取 valid 中实际出现的类别（限大类）
+        valid_categories = set()
+        for item_id in valid_item_ids:
+            cid = metadata.get(item_id, {}).get(CATEGORY_KEY)
+            if cid in large_categories:
+                valid_categories.add(cid)
+
+        # ✅ 比较差集
+        uncovered_categories = large_categories - valid_categories
+
+        # ✅ 输出
+        print(f"\n📊 大类总数：{len(large_categories)}")
+        print(f"✅ valid 中出现的大类种类数：{len(valid_categories)}")
+        if uncovered_categories:
+            print(f"❌ 以下大类没有在 valid 中出现：{sorted(uncovered_categories)}")
+        else:
+            print("🎉 valid 中覆盖了全部大类！")
+
+class TestTestDataset(TestCase):
     def test_test_dataset(self):
         """
-        结论：test中的大类全部小于3000
+        问题：test中的大类全部小于3000??
+        结论：yes
         """
         dataset_dir = ROOT_DIR / 'datasets' / 'polyvore'
         metadata_path = dataset_dir / "item_metadata.json"
@@ -191,11 +413,11 @@ class Test(TestCase):
         large_categories = {cat for cat, count in category_counts.items() if count >= THRESHOLD}
 
         # ✅统计 test 中大类的数量
-        test_item_ids = {iid for outfit in test_outfits for iid in outfit["item_ids"]}
+        test_item_ids = {item_id for outfit in test_outfits for item_id in outfit["item_ids"]}
         test_category_counter = Counter()
 
-        for iid in test_item_ids:
-            cid = metadata.get(iid, {}).get(CATEGORY_KEY)
+        for item_id in test_item_ids:
+            cid = metadata.get(item_id, {}).get(CATEGORY_KEY)
             if cid in large_categories:
                 test_category_counter[cid] += 1
 
@@ -207,3 +429,45 @@ class Test(TestCase):
             count = test_category_counter[cid]
             need_fill = "❌ No" if count >= THRESHOLD else "✅ Yes"
             print(f"{cid:>12} | {count:>10} | {need_fill:>10}")
+
+    def test_test_covers_all_large_categories(self):
+        """
+        检查 test.json 是否覆盖了所有的大类（至少包含一个 item）
+        """
+        dataset_dir = ROOT_DIR / 'datasets' / 'polyvore'
+        metadata_path = dataset_dir / "item_metadata.json"
+        test_path = dataset_dir / "nondisjoint" / "test.json"
+        CATEGORY_KEY = "category_id"
+        THRESHOLD = 3000
+
+        # ✅ 加载 metadata
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            raw_list = json.load(f)
+            metadata = {item["item_id"]: item for item in raw_list}
+
+        # ✅ 统计大类
+        category_counts = Counter(item[CATEGORY_KEY] for item in metadata.values())
+        large_categories = {cat for cat, count in category_counts.items() if count >= THRESHOLD}
+
+        # ✅ 加载 test item_ids
+        with open(test_path, "r", encoding="utf-8") as f:
+            test_outfits = json.load(f)
+        test_item_ids = {item_id for outfit in test_outfits for item_id in outfit["item_ids"]}
+
+        # ✅ 提取 test 中实际出现的类别（限大类）
+        test_categories = set()
+        for item_id in test_item_ids:
+            cid = metadata.get(item_id, {}).get(CATEGORY_KEY)
+            if cid in large_categories:
+                test_categories.add(cid)
+
+        # ✅ 比较差集
+        uncovered_categories = large_categories - test_categories
+
+        # ✅ 输出
+        print(f"\n📊 大类总数：{len(large_categories)}")
+        print(f"✅ test 中出现的大类种类数：{len(test_categories)}")
+        if uncovered_categories:
+            print(f"❌ 以下大类没有在 test 中出现：{sorted(uncovered_categories)}")
+        else:
+            print("🎉 test 中覆盖了全部大类！")
