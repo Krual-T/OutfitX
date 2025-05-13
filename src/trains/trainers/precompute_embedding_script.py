@@ -23,7 +23,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         super().__init__(cfg=cfg, run_mode='custom')
         self.cfg = cfg
         self.item_dataloader = None
-
+    @torch.no_grad()
     def custom_task(self, *args, **kwargs):
         self.model.eval()
         all_ids, all_embeddings = [], []
