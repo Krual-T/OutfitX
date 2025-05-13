@@ -100,7 +100,9 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
     def __get_negative_sample(self, item_id) -> List[int]:
         k = self.negative_sample_k
-        pool = self.negative_pool.get(item_id, [])
+        item_meta = self.metadata[item_id]
+        sample_key = item_meta[self.negative_sample_fine_grained]
+        pool = self.negative_pool.get(sample_key, [])
         filtered = [x for x in pool if x != item_id]
         if len(filtered) < k:
             print(f"⚠️ 类别 {self.negative_sample_fine_grained} 负样本不足 {k} 个，仅有 {len(filtered)} 个")
