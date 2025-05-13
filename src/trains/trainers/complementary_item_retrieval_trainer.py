@@ -36,9 +36,9 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(queries)
                 loss = self.loss(
-                    batch_y=y,
-                    batch_y_hat=y_hats,
-                    batch_negative_samples=neg_items_emb_tensors,
+                    batch_y=y.to(self.local_rank),
+                    batch_y_hat=y_hats.to(self.local_rank),
+                    batch_negative_samples=neg_items_emb_tensors.to(self.local_rank),
                 )
                 original_loss = loss.clone().detach()
             self.scaler.scale(loss).backward()
@@ -84,9 +84,9 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(queries)
                 loss = self.loss(
-                    batch_y=y,
-                    batch_y_hat=y_hats,
-                    batch_negative_samples=neg_items_emb_tensors,
+                    batch_y=y.to(self.local_rank),
+                    batch_y_hat=y_hats.to(self.local_rank),
+                    batch_negative_samples=neg_items_emb_tensors.to(self.local_rank),
                 )
                 original_loss = loss.clone().detach()
             total_loss += original_loss
