@@ -267,10 +267,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
     def setup_train_and_valid_dataloader(self):
         item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
-        collate_fn = lambda batch: (
-            [item[0] for item in batch],
-            [item[1] for item in batch]
-        )
 
         train_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
@@ -317,7 +313,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             sampler=train_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
-            collate_fn=collate_fn
+            collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
         )
 
         self.valid_dataloader = DataLoader(
@@ -327,15 +323,12 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             sampler=valid_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
-            collate_fn=collate_fn
+            collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
         )
 
     def setup_test_dataloader(self):
         item_embeddings = self.load_embeddings(embed_file_prefix="embedding_subset_")
-        collate_fn = lambda batch:(
-            [item[0] for item in batch],
-            [item[1] for item in batch]
-        )
+
         test_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='test',
@@ -348,7 +341,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             batch_size=self.cfg.batch_size,
             shuffle=False,
             num_workers=self.cfg.dataloader_workers,
-            collate_fn=collate_fn
+            collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
         )
 
     def hook_after_setup(self):
