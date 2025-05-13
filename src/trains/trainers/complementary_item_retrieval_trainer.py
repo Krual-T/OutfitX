@@ -242,30 +242,6 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         self.setup_valid_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
 
     def setup_train_dataloader(self, negative_sample_mode: Literal['easy', 'hard'], item_embeddings=None):
-        def collate_fn(batch):
-            query_iter, neg_items_emb_iter = zip(*batch)
-            queries = [query for query in query_iter]
-            pos_item_embeddings = torch.stack([
-                    torch.tensor(
-                        query.target_item.embedding,
-                        dtype=torch.float,
-                        device=self.local_rank
-                    )
-                    for query in queries
-                ])
-            neg_items_emb_tensors = torch.stack([
-                torch.stack([
-                    torch.tensor(
-                        item_emb,
-                        dtype=torch.float,
-                        device=self.local_rank
-                    )
-                    for item_emb in neg_items_emb
-                ])
-                for neg_items_emb in neg_items_emb_iter
-            ])
-
-            return queries,pos_item_embeddings, neg_items_emb_tensors
         train_dataset = PolyvoreComplementaryItemRetrievalDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='train',
@@ -282,38 +258,11 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
-            collate_fn=collate_fn
+            collate_fn=PolyvoreComplementaryItemRetrievalDataset.train_collate_fn
         )
 
     def setup_valid_dataloader(self, negative_sample_mode: Literal['easy', 'hard'], item_embeddings=None):
-        def collate_fn(batch):
-            query_iter, neg_items_emb_iter = zip(*batch)
-            queries = [query for query in query_iter]
-            pos_item_ = {
-                'ids':[
-                    query.target_item.item_id for query in queries
-                ],
-                'embeddings':torch.stack([
-                    torch.tensor(
-                        query.target_item.embedding,
-                        dtype=torch.float,
-                        device=self.local_rank
-                    )
-                    for query in queries
-                ])
-            }
-            neg_items_emb_tensors = torch.stack([
-                torch.stack([
-                    torch.tensor(
-                        item_emb,
-                        dtype=torch.float,
-                        device=self.local_rank
-                    )
-                    for item_emb in neg_items_emb
-                ])
-                for neg_items_emb in neg_items_emb_iter
-            ])
-            return queries,pos_item_, neg_items_emb_tensors
+
         valid_dataset = PolyvoreComplementaryItemRetrievalDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='valid',
@@ -330,15 +279,10 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
-            collate_fn=collate_fn
+            collate_fn=PolyvoreComplementaryItemRetrievalDataset.valid_collate_fn
         )
 
     def setup_test_dataloader(self):
-        def collate_fn(batch):
-            query_iter,_ = zip(*batch)
-            queries = [query for query in query_iter]
-            pos_item_ids = [query.target_item.item_id for query in queries]
-            return queries,pos_item_ids
         item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
         test_dataset = PolyvoreComplementaryItemRetrievalDataset(
             polyvore_type=self.cfg.polyvore_type,
@@ -355,7 +299,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
-            collate_fn=collate_fn
+            collate_fn=PolyvoreComplementaryItemRetrievalDataset.test_collate_fn
         )
 
     def load_loss(self):
