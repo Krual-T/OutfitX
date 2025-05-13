@@ -27,7 +27,7 @@ class BaseTrainConfig(ABC):
     n_epochs: int = 200
     learning_rate: float = 2e-5
     checkpoint: str = None
-    accumulation_steps: int = 4
+    accumulation_steps: int = 1
     seed: int = 42
     @property
     @abstractmethod
