@@ -98,7 +98,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                 msg=str(metrics),
                 metrics=metrics
             )
-            train_processor.set_postfix(**metrics)
 
             local_total_loss += original_loss
             local_y_hats.append(y_hats.detach())
