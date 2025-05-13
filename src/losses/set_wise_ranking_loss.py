@@ -17,7 +17,7 @@ class SetWiseRankingLoss(nn.Module):
         self,
         batch_y: torch.Tensor,
         batch_negative_samples: torch.Tensor,
-        batch_y_hat: torch.Tensors,
+        batch_y_hat: torch.Tensor,
     ):
         query_emb = batch_y_hat
         pos_emb = batch_y
