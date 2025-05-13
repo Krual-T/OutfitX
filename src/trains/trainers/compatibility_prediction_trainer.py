@@ -172,8 +172,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         local_y_hats = torch.cat(local_y_hats, dim=0)
         local_labels = torch.cat(local_labels, dim=0)
 
-        dist.barrier()
-
         metrics = self.build_metrics(
             local_y_hats=local_y_hats,
             local_labels=local_labels,
