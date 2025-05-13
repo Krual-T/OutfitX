@@ -14,7 +14,7 @@ class ItemEncoderConfig:
     def __post_init__(self):
         # 根据不同的类型配置不同的encoder
         if self.type == 'clip':
-            self.clip_model_name: str = "Marqo/marqo-fashionCLIP" #"patrickjohncyh/fashion-clip"
+            self.clip_model_name: str = "Marqo/marqo-fashionSigLIP"#"Marqo/marqo-fashionCLIP" #"patrickjohncyh/fashion-clip"
             dim_per_modality_embed = 512
         elif self.type == 'resnet_hf_sentence_bert':
             self.text_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
