@@ -56,8 +56,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         local_y_hats = []
         local_labels = []
         for step,(queries, labels) in enumerate(train_processor):
-            # 记录每个batch的开始时间
-            batch_start_time = time.time()
             with self.safe_process_context(epoch=epoch):
                 labels = torch.tensor(
                     data=labels,
@@ -81,16 +79,12 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     self.scaler.update()
                     self.optimizer.zero_grad()
                     self.scheduler.step()
-
-                batch_end_time = time.time()
-                local_batch_time = torch.tensor(batch_end_time - batch_start_time, device=self.local_rank, dtype=torch.float32)
             if self.world_size > 1:
                 dist.barrier()
             metrics = self.build_metrics(
                     local_y_hats=y_hats.detach(),
                     local_labels=labels.detach(),
                     local_loss=original_loss,
-                    local_time=local_batch_time,
                     epoch=epoch,
             )
             metrics = {
@@ -127,7 +121,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             local_y_hats=local_y_hats,
             local_labels=local_labels,
             local_loss=local_total_loss,
-            local_time=local_epoch_time,
             batch_count=len(self.train_dataloader),
             epoch=epoch
         )
@@ -144,16 +137,12 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
     @torch.no_grad()
     def valid_epoch(self, epoch: int):
-        # 记录epoch开始时间
-        epoch_start_time = time.time()
         self.model.eval()
         valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
         local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
         local_y_hats = []
         local_labels = []
         for step,(queries, labels) in enumerate(valid_processor):
-            # 记录每个batch的开始时间
-            batch_start_time = time.time()
             with self.safe_process_context(epoch=epoch):
                 labels = torch.tensor(
                     data=labels,
@@ -164,16 +153,12 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     y_hats = self.model(queries).squeeze(dim=-1)
                     loss = self.loss(y_hat=y_hats, y_true=labels)
                     original_loss = loss.clone().detach()
-
-                batch_end_time = time.time()
-                local_batch_time = torch.tensor(batch_end_time - batch_start_time, device=self.local_rank, dtype=torch.float32)
             if self.world_size > 1:
                 dist.barrier()
             metrics = self.build_metrics(
                     local_y_hats=y_hats.detach(),
                     local_labels=labels.detach(),
                     local_loss=original_loss,
-                    local_time=local_batch_time,
                     epoch=epoch,
             )
             metrics = {f'valid/batch/{k}': v for k, v in metrics.items()}
@@ -186,7 +171,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                 msg=str(metrics),
                 metrics=metrics
             )
-            valid_processor.set_postfix(**metrics)
 
             local_total_loss += original_loss
             local_y_hats.append(y_hats.detach())
@@ -199,13 +183,10 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         epoch_end_time = time.time()
         dist.barrier()
 
-        # 计算epoch耗时
-        local_epoch_time = torch.tensor(epoch_end_time - epoch_start_time, device=self.local_rank, dtype=torch.float32)
         metrics = self.build_metrics(
             local_y_hats=local_y_hats,
             local_labels=local_labels,
             local_loss=local_total_loss,
-            local_time=local_epoch_time,
             batch_count=len(self.valid_dataloader),
             epoch=epoch
         )
@@ -407,7 +388,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         local_y_hats:torch.Tensor,
         local_labels:torch.Tensor,
         local_loss:torch.Tensor,
-        local_time:torch.Tensor,
         epoch:int,
         batch_count:int = 1,
     ):
@@ -419,22 +399,18 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
             all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
             all_loss = [torch.empty_like(local_loss) for _ in range(self.world_size)]
-            all_time = [torch.empty_like(local_time) for _ in range(self.world_size)]
         if self.world_size > 1:
             dist.all_gather(all_y_hats, local_y_hats)
             dist.all_gather(all_labels, local_labels)
             dist.all_gather(all_loss, local_loss)
-            dist.all_gather(all_time, local_time)
         else:
             all_y_hats[0] = local_y_hats
             all_labels[0] = local_labels
             all_loss[0] = local_loss
-            all_time[0] = local_time
 
         all_y_hats = torch.cat(all_y_hats, dim=0)
         all_labels = torch.cat(all_labels, dim=0)
         all_loss = torch.stack(all_loss).mean()/batch_count
-        all_time = torch.stack(all_time).mean()
 
         if batch_count > 1:
             # 🔍 输出 label 分布情况
@@ -447,7 +423,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
         return {
             'loss': all_loss.item(),
-            'time': all_time.item(),
             **metrics
         }
     def compute_cp_metrics(self, y_hats: torch.Tensor, labels: torch.Tensor):
