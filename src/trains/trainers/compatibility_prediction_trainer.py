@@ -1,5 +1,4 @@
 import pickle
-import time
 import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score
@@ -45,8 +44,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         }
 
     def train_epoch(self, epoch: int) -> None:
-        # 记录epoch开始时间
-        epoch_start_time = time.time()
         self.model.train()
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
@@ -110,13 +107,9 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
         local_y_hats = torch.cat(local_y_hats, dim=0)
         local_labels = torch.cat(local_labels, dim=0)
-        # 记录epoch结束时间
-        epoch_end_time = time.time()
         if self.world_size > 1:
             dist.barrier()
 
-        # 计算epoch耗时
-        local_epoch_time = torch.tensor(epoch_end_time - epoch_start_time, device=self.local_rank, dtype=torch.float32)
         metrics = self.build_metrics(
             local_y_hats=local_y_hats,
             local_labels=local_labels,
@@ -179,8 +172,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
         local_y_hats = torch.cat(local_y_hats, dim=0)
         local_labels = torch.cat(local_labels, dim=0)
-        # 记录epoch结束时间
-        epoch_end_time = time.time()
+
         dist.barrier()
 
         metrics = self.build_metrics(
