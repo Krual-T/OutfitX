@@ -100,7 +100,9 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
     def __get_negative_sample(self, item_id) -> List[int]:
         k = self.negative_sample_k
-        pool = self.negative_pool.get(item_id, [])
+        item_meta = self.metadata[item_id]
+        sample_key = item_meta[self.negative_sample_fine_grained]
+        pool = self.negative_pool.get(sample_key, [])
         filtered = [x for x in pool if x != item_id]
         if len(filtered) < k:
             print(f"⚠️ 类别 {self.negative_sample_fine_grained} 负样本不足 {k} 个，仅有 {len(filtered)} 个")
@@ -133,7 +135,10 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
             # ✅ embedding tensor
             try:
-                embeddings = torch.stack([self.embedding_dict[item_id] for item_id in total])
+                embeddings = torch.stack([
+                    torch.tensor(self.embedding_dict[item_id],dtype=torch.float)
+                    for item_id in total
+                ])
             except KeyError as e:
                 print(f"⚠️ embedding_dict 缺失 item_id: {e}")
                 raise e
@@ -146,6 +151,63 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
         print(f"✅ 候选池构建完毕：每类 {candidate_max_size} 个")
         return candidate_pool
+
+    @staticmethod
+    def train_collate_fn(batch):
+        query_iter, neg_items_emb_iter = zip(*batch)
+        queries = [query for query in query_iter]
+        pos_item_embeddings = torch.stack([
+            torch.tensor(
+                query.target_item.embedding,
+                dtype=torch.float,
+            )
+            for query in queries
+        ])
+        neg_items_emb_tensors = torch.stack([
+            torch.stack([
+                torch.tensor(
+                    item_emb,
+                    dtype=torch.float,
+                )
+                for item_emb in neg_items_emb
+            ])
+            for neg_items_emb in neg_items_emb_iter
+        ])
+
+        return queries, pos_item_embeddings, neg_items_emb_tensors
+    @staticmethod
+    def valid_collate_fn(batch):
+        query_iter, neg_items_emb_iter = zip(*batch)
+        queries = [query for query in query_iter]
+        pos_item_ = {
+            'ids': [
+                query.target_item.item_id for query in queries
+            ],
+            'embeddings': torch.stack([
+                torch.tensor(
+                    query.target_item.embedding,
+                    dtype=torch.float
+                )
+                for query in queries
+            ])
+        }
+        neg_items_emb_tensors = torch.stack([
+            torch.stack([
+                torch.tensor(
+                    item_emb,
+                    dtype=torch.float
+                )
+                for item_emb in neg_items_emb
+            ])
+            for neg_items_emb in neg_items_emb_iter
+        ])
+        return queries, pos_item_, neg_items_emb_tensors
+    @staticmethod
+    def test_collate_fn(batch):
+        query_iter, _ = zip(*batch)
+        queries = [query for query in query_iter]
+        pos_item_ids = [query.target_item.item_id for query in queries]
+        return queries, pos_item_ids
 
 class Test(TestCase):
     def test_check_semantic_category(self):

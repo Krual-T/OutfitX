@@ -15,12 +15,12 @@ class SetWiseRankingLoss(nn.Module):
 
     def forward(
         self,
-        batch_answer: torch.Tensor,
+        batch_y: torch.Tensor,
         batch_negative_samples: torch.Tensor,
-        batch_y_hat: torch.Tensors,
+        batch_y_hat: torch.Tensor,
     ):
         query_emb = batch_y_hat
-        pos_emb = batch_answer
+        pos_emb = batch_y
         neg_embs = batch_negative_samples
         # 正样本距离
         pos_dist = F.pairwise_distance(query_emb, pos_emb)  # shape: (B,)

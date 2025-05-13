@@ -27,7 +27,7 @@ class BaseTrainConfig(ABC):
     n_epochs: int = 200
     learning_rate: float = 2e-5
     checkpoint: str = None
-    accumulation_steps: int = 4
+    accumulation_steps: int = 1
     seed: int = 42
     @property
     @abstractmethod
@@ -55,7 +55,6 @@ class BaseTrainConfig(ABC):
         self.precomputed_embedding_dir:Path = self.dataset_dir / 'precomputed_embeddings'
         if self.world_size == -1:
             self.world_size = torch.cuda.device_count()
-
         if self.dataset_name == 'polyvore':
             self.polyvore_type:Literal['nondisjoint', 'disjoint'] ='nondisjoint'
-
+            self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.polyvore_type /self.name
