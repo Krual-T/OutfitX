@@ -133,7 +133,10 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
             # ✅ embedding tensor
             try:
-                embeddings = torch.stack([self.embedding_dict[item_id] for item_id in total])
+                embeddings = torch.stack([
+                    torch.tensor(self.embedding_dict[item_id],dtype=torch.float)
+                    for item_id in total
+                ])
             except KeyError as e:
                 print(f"⚠️ embedding_dict 缺失 item_id: {e}")
                 raise e
