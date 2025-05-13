@@ -31,14 +31,14 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
-        for step,(queries, pos_item_, neg_items_emb_tensors) in enumerate(train_processor):
-            y = pos_item_['embeddings']
+        for step,(queries, pos_item_embeddings, neg_items_emb_tensors) in enumerate(train_processor):
+            y = pos_item_embeddings
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(queries)
                 loss = self.loss(
-                    batch_answer=y,
+                    batch_y=y,
+                    batch_y_hat=y_hats,
                     batch_negative_samples=neg_items_emb_tensors,
-                    batch_y_hat=y_hats
                 )
                 original_loss = loss.clone().detach()
             self.scaler.scale(loss).backward()
@@ -84,9 +84,9 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(queries)
                 loss = self.loss(
-                    batch_answer=y,
+                    batch_y=y,
+                    batch_y_hat=y_hats,
                     batch_negative_samples=neg_items_emb_tensors,
-                    batch_y_hat=y_hats
                 )
                 original_loss = loss.clone().detach()
             total_loss += original_loss
