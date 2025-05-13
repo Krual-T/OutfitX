@@ -38,3 +38,7 @@ class PolyvoreCompatibilityPredictionDataset(PolyvoreItemDataset):
             ]
         )
         return query, label
+    @staticmethod
+    def collate_fn(batch):
+        queries_iter, labels_iter = zip(*batch)
+        return [query for query in queries_iter], [label for label in labels_iter]
