@@ -14,7 +14,7 @@ class OutfitTransformerConfig:
     # 定义是否进行截断，默认为True
     truncation: bool = True
     # 定义嵌入维度，默认为128 这个输出要和item_encoder的输出维度一致
-    d_embed: int = 128
+    d_embed: int = 1024
 
     item_encoder: ItemEncoderConfig = field(default_factory=ItemEncoderConfig)
     transformer: TransformerConfig = field(default_factory=TransformerConfig)
