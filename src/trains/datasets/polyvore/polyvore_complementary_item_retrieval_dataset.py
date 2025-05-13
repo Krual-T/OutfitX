@@ -152,6 +152,63 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
         print(f"✅ 候选池构建完毕：每类 {candidate_max_size} 个")
         return candidate_pool
 
+    @staticmethod
+    def train_collate_fn(batch):
+        query_iter, neg_items_emb_iter = zip(*batch)
+        queries = [query for query in query_iter]
+        pos_item_embeddings = torch.stack([
+            torch.tensor(
+                query.target_item.embedding,
+                dtype=torch.float,
+            )
+            for query in queries
+        ])
+        neg_items_emb_tensors = torch.stack([
+            torch.stack([
+                torch.tensor(
+                    item_emb,
+                    dtype=torch.float,
+                )
+                for item_emb in neg_items_emb
+            ])
+            for neg_items_emb in neg_items_emb_iter
+        ])
+
+        return queries, pos_item_embeddings, neg_items_emb_tensors
+    @staticmethod
+    def valid_collate_fn(batch):
+        query_iter, neg_items_emb_iter = zip(*batch)
+        queries = [query for query in query_iter]
+        pos_item_ = {
+            'ids': [
+                query.target_item.item_id for query in queries
+            ],
+            'embeddings': torch.stack([
+                torch.tensor(
+                    query.target_item.embedding,
+                    dtype=torch.float
+                )
+                for query in queries
+            ])
+        }
+        neg_items_emb_tensors = torch.stack([
+            torch.stack([
+                torch.tensor(
+                    item_emb,
+                    dtype=torch.float
+                )
+                for item_emb in neg_items_emb
+            ])
+            for neg_items_emb in neg_items_emb_iter
+        ])
+        return queries, pos_item_, neg_items_emb_tensors
+    @staticmethod
+    def test_collate_fn(batch):
+        query_iter, _ = zip(*batch)
+        queries = [query for query in query_iter]
+        pos_item_ids = [query.target_item.item_id for query in queries]
+        return queries, pos_item_ids
+
 class Test(TestCase):
     def test_check_semantic_category(self):
         import json
