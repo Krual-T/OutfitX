@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from typing import List, Tuple
+from typing import List, Tuple, Union
+
+from PIL import Image
 from torchvision.models import resnet18, ResNet18_Weights
 from torchvision import transforms
 from src.models.encoders.base_encoders import BaseImageEncoder
@@ -74,10 +76,14 @@ class Resnet18ImageEncoder(BaseImageEncoder):
 
     def _forward(
             self,
-            images: List[np.ndarray]
+            images: List[Union[np.ndarray, Image.Image]]
     ):
         transformed_images = torch.stack(
-            [self.transform(image) for image in images]
+            [
+                self.transform(
+                    Image.fromarray(image) if isinstance(image, np.ndarray) else image
+                ) for image in images
+            ]
         ).to(self.device)
 
         image_embeddings = self.model(

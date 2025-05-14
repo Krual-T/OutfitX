@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Union
 
 import numpy as np
 import open_clip
@@ -20,14 +20,19 @@ class SigLIPImageEncoder(BaseImageEncoder):
         self.model.eval()
         if freeze:
             freeze_model(self.model)
-    def processor(self, images: List[np.ndarray]):
+    def processor(self, images: List[Union[np.ndarray, Image.Image]]):
         return torch.stack(
-            [self.transforms(Image.fromarray(image)) for image in images]
+            [
+                self.transforms(
+                    Image.fromarray(image) if isinstance(image, np.ndarray) else image
+                )
+                for image in images
+            ]
         )
     @torch.no_grad()
     def _forward(
             self,
-            images: List[np.ndarray]
+            images: List[Union[np.ndarray, Image.Image]]
     ):
         transformed_images = self.processor(images=images).to(self.device)
 

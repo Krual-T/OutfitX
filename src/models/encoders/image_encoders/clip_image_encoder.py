@@ -1,8 +1,9 @@
 import torch
 import numpy as np
+from PIL import Image
 
 from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Union
 from src.models.utils.model_utils import freeze_model
 from src.models.encoders.base_encoders import BaseImageEncoder
 
@@ -51,7 +52,7 @@ class CLIPImageEncoder(BaseImageEncoder):
     @torch.no_grad()
     def _forward(
             self,
-            images: List[np.ndarray],
+            images: List[Union[np.ndarray, Image.Image]],
             processor_kargs: Dict[str, Any] = None
     ):
         # 设置processor参数

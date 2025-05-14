@@ -28,8 +28,8 @@ class BaseImageEncoder(nn.Module, ABC):
         # 将图像列表展平
         images = flatten_seq_to_one_dim(images)
 
-        if len(images)>0 and type(images[0]) == Image.Image:
-            images = [np.array(image) for image in images]
+        # if len(images)>0 and isinstance(images[0], Image.Image):
+        #     images = [np.array(image) for image in images]
 
         image_embeddings = self._forward(images, *args, **kwargs)
 
@@ -46,7 +46,7 @@ class BaseImageEncoder(nn.Module, ABC):
     @abstractmethod
     def _forward(
             self,
-            images: List[np.ndarray]
+            images: List[Union[np.ndarray, Image.Image]]
     ) -> torch.Tensor:
         raise NotImplementedError('这个_forward（image_embed）方法必须由子类来实现')
 
