@@ -1,5 +1,5 @@
 import pickle
-from typing import cast, Literal, List
+from typing import cast, Literal, List, Dict
 
 import numpy as np
 import torch
@@ -24,7 +24,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             cfg = CIRTrainConfig()
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.device_type = None
-        self.best_loss = np.inf
+        self.best_metrics = {}
 
     def train_epoch(self, epoch):
         self.model.train()
@@ -122,6 +122,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 pos_item_ids=all_pos_item_ids
             )
         }
+        self.try_save_checkpoint(metrics=metrics, epoch=epoch)
         metrics = {
             'epoch':epoch,
             **{f'valid/epoch/{k}':v for k,v in metrics.items()}
@@ -163,6 +164,18 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             metrics[f"Recall@{k}"] = hits / y_hats.size(0)
         return metrics
 
+    def try_save_checkpoint(self, metrics: Dict[str, float], epoch: int):
+        for metric,metric_value in metrics.items():
+            sign = 1 if metric=='loss' else -1
+            best = self.best_metrics.get(metric, sign * np.inf)
+            if metric_value * sign < best * sign:
+                self.best_metrics[metric] = metric_value
+                ckpt_name = f"{self.model.cfg.model_name}_best_{metric}"
+                self.save_checkpoint(ckpt_name=ckpt_name,epoch=epoch)
+                self.log(
+                    level='info',
+                    msg=f"✅ New best {metric}: {metric_value:.4f}, saved as {ckpt_name}.pth"
+                )
     @torch.no_grad()
     def test(self):
         self.model.eval()
