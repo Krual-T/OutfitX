@@ -324,6 +324,10 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         self.device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
         if self.world_size >1 and self.run_mode == 'test':
             raise ValueError("测试模式下不支持分布式")
+        self.model = cast(
+            OutfitTransformer,
+            self.model
+        )
 
     def load_model(self) -> nn.Module:
         cfg = OutfitTransformerConfig()
@@ -516,8 +520,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
             if should_save:
                 self.best_metrics[metric_name] = current_value
-
-                ckpt_name = f"best_{metric_name}"
+                ckpt_name = f"{self.model.cfg.model_name}_best_{metric_name}"
                 self.save_checkpoint(epoch=epoch, ckpt_name=ckpt_name)
                 self.log(
                     level='info',

@@ -1,5 +1,6 @@
 import os
 import pickle
+from typing import cast
 
 import numpy as np
 import torch
@@ -43,8 +44,8 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         all_embeddings = np.concatenate(all_embeddings, axis=0)
         precomputed_embedding_dir = self.cfg.precomputed_embedding_dir
         os.makedirs(precomputed_embedding_dir, exist_ok=True)
-
-        save_path = precomputed_embedding_dir / f'{PolyvoreItemDataset.embed_file_prefix}{self.rank}.pkl'
+        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        save_path = precomputed_embedding_dir / f'{prefix}{self.rank}.pkl'
         with open(save_path, 'wb') as f:
             pickle.dump({'ids': all_ids, 'embeddings': all_embeddings}, f)
 
@@ -90,7 +91,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
     def setup_test_dataloader(self):
         pass
     def hook_after_setup(self):
-        pass
+        self.model = cast(OutfitTransformer, self.model)
 
 
 

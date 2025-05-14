@@ -47,7 +47,7 @@ class DistributedTrainer(ABC):
 
             - project_name: 项目名称
 
-            - name: 实验名称（可选）
+            - run_name: 实验名称（可选）
 
             - seed: 随机种子
 
@@ -237,7 +237,7 @@ class DistributedTrainer(ABC):
         if self.rank == 0:
             log_dir = self.cfg.LOG_DIR or pathlib.Path("./logs")
             log_dir.mkdir(parents=True, exist_ok=True)
-            log_name = f"{self.cfg.project_name + (('_' + self.cfg.name) if self.cfg.name else '')}.log"
+            log_name = f"{self.cfg.project_name + (('_' + self.cfg.run_name) if self.cfg.run_name else '')}.log"
             log_file = log_dir / log_name
 
             # 配置日志记录器
@@ -259,7 +259,7 @@ class DistributedTrainer(ABC):
                 self.wandb_run = wandb.init(
                     project=self.cfg.project_name,
                     config=self.cfg.__dict__,
-                    name=self.cfg.name
+                    name=self.cfg.run_name
                 )
     def setup_seed(self):
         seed = self.cfg.seed+self.rank
