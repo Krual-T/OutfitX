@@ -238,7 +238,8 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         return torch.amp.GradScaler()
 
     def setup_train_and_valid_dataloader(self, sample_mode: Literal['easy','hard']='easy'):
-        item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
+        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         self.setup_train_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
         self.setup_valid_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
 
@@ -284,7 +285,8 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         )
 
     def setup_test_dataloader(self):
-        item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
+        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         test_dataset = PolyvoreComplementaryItemRetrievalDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='test',

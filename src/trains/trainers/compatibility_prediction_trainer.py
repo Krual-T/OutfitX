@@ -236,8 +236,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         )
 
     def setup_train_and_valid_dataloader(self):
-        item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
-
+        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         train_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='train',
@@ -297,8 +297,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         )
 
     def setup_test_dataloader(self):
-        item_embeddings = self.load_embeddings(embed_file_prefix="embedding_subset_")
-
+        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         test_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='test',
