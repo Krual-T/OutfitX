@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from typing import List
+from typing import List, Tuple
 from torchvision.models import resnet18, ResNet18_Weights
 from torchvision import transforms
 from src.models.encoders.base_encoders import BaseImageEncoder
@@ -65,9 +65,9 @@ class Resnet18ImageEncoder(BaseImageEncoder):
                 """
 
     @property
-    def image_size(self) -> int:
-        return self.crop_size
-
+    def image_size(self) -> Tuple[int, int]:
+        image_size = (self.crop_size, self.crop_size)
+        return image_size
     @property
     def d_embed(self) -> int:
         return self.d_embed

@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 import numpy as np
 import open_clip
@@ -38,8 +38,14 @@ class SigLIPImageEncoder(BaseImageEncoder):
         return image_embeddings
 
     @property
-    def image_size(self) -> int:
-        return  self.model.visual.image_size
+    def image_size(self) -> Tuple[int, int]:
+        image_size:Tuple[int, int] = self.model.visual.image_size
+        if isinstance(image_size, tuple):
+            return image_size
+        elif isinstance(image_size, int):
+            return image_size, image_size
+        else:
+            raise ValueError("Invalid image size")
 
 
     @property
