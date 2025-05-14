@@ -1,6 +1,6 @@
 from torch import nn
 from .image_encoders import Resnet18ImageEncoder, CLIPImageEncoder, SigLIPImageEncoder
-from .text_encoders import CLIPTextEncoder,HuggingFaceTextEncoder
+from .text_encoders import CLIPTextEncoder, HuggingFaceTextEncoder, SigLIPTextEncoder
 
 from src.models.utils.model_utils import aggregate_embeddings
 from src.models.configs import ItemEncoderConfig
@@ -27,7 +27,7 @@ class ItemEncoder(nn.Module):
             self.image_enc = SigLIPImageEncoder(
                 model_name_or_path=cfg.slip_model_name
             )
-            self.text_enc = CLIPTextEncoder(
+            self.text_enc = SigLIPTextEncoder(
                 model_name_or_path=cfg.slip_model_name
             )
     @property
