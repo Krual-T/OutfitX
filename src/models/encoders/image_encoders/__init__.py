@@ -1,2 +1,3 @@
 from .resnet18_image_encoder import Resnet18ImageEncoder
 from .clip_image_encoder import CLIPImageEncoder
+from .slip_image_encoder import SigLIPImageEncoder

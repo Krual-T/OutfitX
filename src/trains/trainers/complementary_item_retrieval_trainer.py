@@ -1,5 +1,5 @@
 import pickle
-from typing import cast, Literal, List
+from typing import cast, Literal, List, Dict
 
 import numpy as np
 import torch
@@ -24,7 +24,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             cfg = CIRTrainConfig()
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.device_type = None
-        self.best_loss = np.inf
+        self.best_metrics = {}
 
     def train_epoch(self, epoch):
         self.model.train()
@@ -122,6 +122,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 pos_item_ids=all_pos_item_ids
             )
         }
+        self.try_save_checkpoint(metrics=metrics, epoch=epoch)
         metrics = {
             'epoch':epoch,
             **{f'valid/epoch/{k}':v for k,v in metrics.items()}
@@ -163,6 +164,18 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             metrics[f"Recall@{k}"] = hits / y_hats.size(0)
         return metrics
 
+    def try_save_checkpoint(self, metrics: Dict[str, float], epoch: int):
+        for metric,metric_value in metrics.items():
+            sign = 1 if metric=='loss' else -1
+            best = self.best_metrics.get(metric, sign * np.inf)
+            if metric_value * sign < best * sign:
+                self.best_metrics[metric] = metric_value
+                ckpt_name = f"{self.model.cfg.model_name}_best_{metric}"
+                self.save_checkpoint(ckpt_name=ckpt_name,epoch=epoch)
+                self.log(
+                    level='info',
+                    msg=f"✅ New best {metric}: {metric_value:.4f}, saved as {ckpt_name}.pth"
+                )
     @torch.no_grad()
     def test(self):
         self.model.eval()
@@ -194,21 +207,22 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
 
     def hook_after_setup(self):
         self.device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.model = cast(
+            OutfitTransformer,
+            self.model
+        )
         if self.world_size > 1 and self.run_mode == 'test':
             raise ValueError("测试模式下不支持分布式")
+        ckpt_name_prefix = self.model.cfg.model_name
         if self.run_mode == 'train-valid':
-            ckpt_path = self.cfg.checkpoint_dir.parent / 'compatibility_prediction' / 'best_AUC.pth'
+            ckpt_path = self.cfg.checkpoint_dir.parent / 'compatibility_prediction' / f'{ckpt_name_prefix}_best_AUC.pth'
         elif self.run_mode == 'test':
-            ckpt_path = self.cfg.checkpoint_dir / 'best_loss.pth'
+            ckpt_path = self.cfg.checkpoint_dir / f'{ckpt_name_prefix}_best_loss.pth'
         else:
             raise ValueError("未知的运行模式")
         self.load_checkpoint(ckpt_path=ckpt_path, only_load_model=True)
 
         self.cfg = cast(CIRTrainConfig, self.cfg)
-        self.model = cast(
-            OutfitTransformer,
-            self.model
-        )
         self.loss = cast(
             SetWiseRankingLoss,
             self.loss
@@ -237,7 +251,8 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         return torch.amp.GradScaler()
 
     def setup_train_and_valid_dataloader(self, sample_mode: Literal['easy','hard']='easy'):
-        item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
+        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         self.setup_train_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
         self.setup_valid_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
 
@@ -283,7 +298,8 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         )
 
     def setup_test_dataloader(self):
-        item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
+        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         test_dataset = PolyvoreComplementaryItemRetrievalDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='test',

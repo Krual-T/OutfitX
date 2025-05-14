@@ -19,3 +19,4 @@ dependencies:
     - opencv-python
     - gdown
     - torchmetrics
+    - open-clip-torch

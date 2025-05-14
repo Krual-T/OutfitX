@@ -60,8 +60,7 @@ class OutfitTransformer(nn.Module):
 
         # 4 pad
         ## 4.1 用于填充文本和图片形状
-        image_size = (self.item_encoder.image_size, self.item_encoder.image_size)
-        self.image_pad = Image.new("RGB", image_size)
+        self.image_pad = Image.new("RGB", self.item_encoder.image_size)
         self.text_pad = ''
         ## 4.2 用于填充outfit的嵌入向量
         self.pad_emb = nn.Parameter(

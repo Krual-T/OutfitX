@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from abc import ABC, abstractmethod
-from typing import List, Union
+from typing import List, Union, Tuple
 from PIL import Image
 from src.models.utils.model_utils import flatten_seq_to_one_dim
 
@@ -28,8 +28,8 @@ class BaseImageEncoder(nn.Module, ABC):
         # 将图像列表展平
         images = flatten_seq_to_one_dim(images)
 
-        if len(images)>0 and type(images[0]) == Image.Image:
-            images = [np.array(image) for image in images]
+        # if len(images)>0 and isinstance(images[0], Image.Image):
+        #     images = [np.array(image) for image in images]
 
         image_embeddings = self._forward(images, *args, **kwargs)
 
@@ -46,7 +46,7 @@ class BaseImageEncoder(nn.Module, ABC):
     @abstractmethod
     def _forward(
             self,
-            images: List[np.ndarray]
+            images: List[Union[np.ndarray, Image.Image]]
     ) -> torch.Tensor:
         raise NotImplementedError('这个_forward（image_embed）方法必须由子类来实现')
 
@@ -62,13 +62,13 @@ class BaseImageEncoder(nn.Module, ABC):
 
     @property
     @abstractmethod
-    def image_size(self) -> int:
-        self._property_not_implemented()
+    def image_size(self) -> Tuple[int, int]:
+        raise NotImplementedError('这个image_size方法必须由子类来实现')
 
     @property
     @abstractmethod
     def d_embed(self) -> int:
-        self._property_not_implemented()
+        raise NotImplementedError('这个d_embed方法必须由子类来实现')
 
     def __is_sequence_elements_length_consistent(
             self,

@@ -195,7 +195,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
     @torch.no_grad()
     def test(self):
-        ckpt_path = self.cfg.checkpoint_dir / 'best_AUC.pth'
+        ckpt_name_prefix = self.model.cfg.model_name
+        ckpt_path = self.cfg.checkpoint_dir / f'{ckpt_name_prefix}_best_AUC.pth'
         self.load_checkpoint(ckpt_path=ckpt_path, only_load_model=True)
         self.model.eval()
         test_processor = tqdm(self.test_dataloader, desc='[Test] Compatibility Prediction')
@@ -236,8 +237,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         )
 
     def setup_train_and_valid_dataloader(self):
-        item_embeddings = self.load_embeddings(embed_file_prefix=PolyvoreItemDataset.embed_file_prefix)
-
+        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         train_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='train',
@@ -297,8 +298,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         )
 
     def setup_test_dataloader(self):
-        item_embeddings = self.load_embeddings(embed_file_prefix="embedding_subset_")
-
+        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         test_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='test',
@@ -324,6 +325,10 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         self.device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
         if self.world_size >1 and self.run_mode == 'test':
             raise ValueError("测试模式下不支持分布式")
+        self.model = cast(
+            OutfitTransformer,
+            self.model
+        )
 
     def load_model(self) -> nn.Module:
         cfg = OutfitTransformerConfig()
@@ -507,21 +512,16 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
     #     }
 
     def maybe_save_best_models(self, metrics: dict, epoch: int):
-        for metric_name, best_value in self.best_metrics.items():
-            current_value = metrics[metric_name]
-
-            # 判断是越大越好还是越小越好
-            mode = 'min' if metric_name == 'loss' else 'max'
-            should_save = (current_value < best_value) if mode == 'min' else (current_value > best_value)
-
-            if should_save:
-                self.best_metrics[metric_name] = current_value
-
-                ckpt_name = f"best_{metric_name}"
-                self.save_checkpoint(epoch=epoch, ckpt_name=ckpt_name)
+        for metric,metric_value in metrics.items():
+            sign = 1 if metric=='loss' else -1
+            best = self.best_metrics.get(metric, sign * np.inf)
+            if metric_value * sign < best * sign:
+                self.best_metrics[metric] = metric_value
+                ckpt_name = f"{self.model.cfg.model_name}_best_{metric}"
+                self.save_checkpoint(ckpt_name=ckpt_name,epoch=epoch)
                 self.log(
                     level='info',
-                    msg=f"✅ New best {metric_name}: {current_value:.4f}, saved to {ckpt_name}.pth"
+                    msg=f"✅ New best {metric}: {metric_value:.4f}, saved as {ckpt_name}.pth"
                 )
 
     def setup_custom_dataloader(self):

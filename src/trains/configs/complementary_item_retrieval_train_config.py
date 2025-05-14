@@ -8,7 +8,7 @@ class ComplementaryItemRetrievalTrainConfig(BaseTrainConfig):
     batch_size: int = 4096
     dataloader_workers: int = 8
     polyvore_type: Literal['nondisjoint', 'disjoint'] = 'nondisjoint'
-    name: str = 'complementary_item_retrieval'
+    run_name: str = 'complementary_item_retrieval'
     auto_save_checkpoint: bool = True
     load_image: bool = False
     learning_rate: float = 2e-5 # learning rate

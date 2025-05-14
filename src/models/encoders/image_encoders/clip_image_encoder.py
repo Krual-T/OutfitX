@@ -1,8 +1,9 @@
 import torch
 import numpy as np
+from PIL import Image
 
 from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple, Union
 from src.models.utils.model_utils import freeze_model
 from src.models.encoders.base_encoders import BaseImageEncoder
 
@@ -31,8 +32,16 @@ class CLIPImageEncoder(BaseImageEncoder):
 
     # 获取图像大小 224
     @property
-    def image_size(self) -> int:
-        return self.processor.size['shortest_edge']
+    def image_size(self) -> Tuple[int, int]:
+        size = self.processor.size['shortest_edge']
+        image_size:Tuple[int, int] = (size, size)
+        if isinstance(image_size, tuple):
+            return image_size
+        elif isinstance(image_size, int):
+            return image_size, image_size
+        else:
+            raise ValueError("Invalid image size")
+
 
     # 获取嵌入维度 512
     @property
@@ -43,7 +52,7 @@ class CLIPImageEncoder(BaseImageEncoder):
     @torch.no_grad()
     def _forward(
             self,
-            images: List[np.ndarray],
+            images: List[Union[np.ndarray, Image.Image]],
             processor_kargs: Dict[str, Any] = None
     ):
         # 设置processor参数
