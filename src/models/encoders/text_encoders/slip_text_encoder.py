@@ -19,6 +19,7 @@ class SigLIPTextEncoder(BaseTextEncoder):
         if freeze:
             freeze_model(self.model)
         self.tokenizer = open_clip.get_tokenizer(model_name_or_path)
+    @torch.no_grad()
     def _forward(self, texts: List[str]) -> torch.Tensor:
         inputs = self.tokenizer(texts).to(self.device)
         inputs = {
