@@ -1,5 +1,5 @@
 from torch import nn
-from .image_encoders import Resnet18ImageEncoder,CLIPImageEncoder
+from .image_encoders import Resnet18ImageEncoder, CLIPImageEncoder, SigLIPImageEncoder
 from .text_encoders import CLIPTextEncoder,HuggingFaceTextEncoder
 
 from src.models.utils.model_utils import aggregate_embeddings
@@ -23,7 +23,13 @@ class ItemEncoder(nn.Module):
             self.text_enc = CLIPTextEncoder(
                 model_name_or_path=cfg.clip_model_name
             )
-
+        elif cfg.type == 'slip':
+            self.image_enc = SigLIPImageEncoder(
+                model_name_or_path=cfg.slip_model_name
+            )
+            self.text_enc = CLIPTextEncoder(
+                model_name_or_path=cfg.clip_model_name
+            )
     @property
     def d_embed(self):
         return self.cfg.dim_per_modality * 2 if self.cfg.aggregation_method == 'concat' else self.cfg.dim_per_modality

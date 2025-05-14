@@ -8,7 +8,7 @@ from PIL import Image
 from src.models.encoders.base_encoders import BaseImageEncoder
 from src.models.utils.model_utils import freeze_model
 
-class SigLIP(BaseImageEncoder):
+class SigLIPImageEncoder(BaseImageEncoder):
     def __init__(
             self,
             model_name_or_path: str = "hf-hub:Marqo/marqo-fashionSigLIP",
