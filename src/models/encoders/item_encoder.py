@@ -28,7 +28,7 @@ class ItemEncoder(nn.Module):
                 model_name_or_path=cfg.slip_model_name
             )
             self.text_enc = CLIPTextEncoder(
-                model_name_or_path=cfg.clip_model_name
+                model_name_or_path=cfg.slip_model_name
             )
     @property
     def d_embed(self):
