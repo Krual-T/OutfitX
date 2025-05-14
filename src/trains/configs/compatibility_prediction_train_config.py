@@ -10,7 +10,7 @@ class CompatibilityPredictionTrainConfig(BaseTrainConfig):
     batch_size: int = 4096
     dataloader_workers: int = 4
     polyvore_type: Literal['nondisjoint', 'disjoint'] = 'nondisjoint'
-    name: str = 'compatibility_prediction'
+    run_name: str = 'compatibility_prediction'
     auto_save_checkpoint: bool = True
     load_image: bool = False
     learning_rate: float = 2e-5 # learning rate

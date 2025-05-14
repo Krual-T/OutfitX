@@ -44,17 +44,17 @@ class BaseTrainConfig(ABC):
         pass
     @property
     @abstractmethod
-    def name(self) -> str:
+    def run_name(self) -> str:
         pass
     # 模式配置
     demo: bool = False
 
     def __post_init__(self):
         self.dataset_dir:Path = ROOT_DIR / 'datasets' / self.dataset_name
-        self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.name
+        self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.run_name
         self.precomputed_embedding_dir:Path = self.dataset_dir / 'precomputed_embeddings'
         if self.world_size == -1:
             self.world_size = torch.cuda.device_count()
         if self.dataset_name == 'polyvore':
             self.polyvore_type:Literal['nondisjoint', 'disjoint'] ='nondisjoint'
-            self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.polyvore_type /self.name
+            self.checkpoint_dir:Path = ROOT_DIR / 'checkpoints' / self.polyvore_type /self.run_name
