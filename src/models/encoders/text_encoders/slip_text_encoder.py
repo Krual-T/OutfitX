@@ -14,26 +14,18 @@ class SigLIPTextEncoder(BaseTextEncoder):
             freeze: bool = True
     ):
         super().__init__()
-        self.max_length = 64
         self.model, _, _ = open_clip.create_model_and_transforms(model_name_or_path)
         self.model.eval()
         if freeze:
             freeze_model(self.model)
         self.tokenizer = open_clip.get_tokenizer(model_name_or_path)
     def _forward(self, texts: List[str]) -> torch.Tensor:
-        tokenizer_inputs = {
-            'text': texts,
-            'max_length': self.max_length,
-            'padding': 'max_length',
-            'truncation': True,
-            'return_tensors': 'pt'
-        }
-        text = self.tokenizer(**tokenizer_inputs)
-        text = {
+        inputs = self.tokenizer(texts).to(self.device)
+        inputs = {
             k: v.to(self.device)
-            for k, v in text.items()
+            for k, v in inputs.items()
         }
-        text_embeddings = self.model.encode_text(**text)
+        text_embeddings = self.model.encode_text(**inputs)
         return text_embeddings
 
     @property
