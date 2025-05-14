@@ -22,6 +22,6 @@ class ItemEncoderConfig:
             self.text_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
             dim_per_modality_embed = 64
         elif self.type =='slip':
-            self.slip_model_name: str = "Marqo/marqo-fashionSigLIP"
+            self.slip_model_name: str = "hf-hub:Marqo/marqo-fashionSigLIP"
             dim_per_modality_embed = 768
         self.dim_per_modality:int = dim_per_modality_embed

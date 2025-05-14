@@ -11,7 +11,7 @@ from src.models.utils.model_utils import freeze_model
 class SigLIP(BaseImageEncoder):
     def __init__(
             self,
-            model_name_or_path: str = "Marqo/marqo-fashionSigLIP",
+            model_name_or_path: str = "hf-hub:Marqo/marqo-fashionSigLIP",
             freeze: bool = True
     ):
         super().__init__()
@@ -44,7 +44,7 @@ class SigLIP(BaseImageEncoder):
 
     @property
     def d_embed(self) -> int:
-        if self.model_name_or_path == "Marqo/marqo-fashionSigLIP":
+        if self.model_name_or_path == "hf-hub:Marqo/marqo-fashionSigLIP":
             return 768
         else:
             raise NotImplementedError
