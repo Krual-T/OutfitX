@@ -14,6 +14,7 @@ class SigLIPTextEncoder(BaseTextEncoder):
             freeze: bool = True
     ):
         super().__init__()
+        self.max_length = 64
         self.model, _, _ = open_clip.create_model_and_transforms(model_name_or_path)
         self.model.eval()
         if freeze:
