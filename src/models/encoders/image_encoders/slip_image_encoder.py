@@ -4,6 +4,7 @@ import numpy as np
 import open_clip
 import torch
 from PIL import Image
+from torch import autocast
 
 from src.models.encoders.base_encoders import BaseImageEncoder
 from src.models.utils.model_utils import freeze_model
@@ -37,7 +38,8 @@ class SigLIPImageEncoder(BaseImageEncoder):
         transformed_images = self.processor(images=images).to(self.device)
 
         # 获取图像嵌入
-        image_embeddings = self.model.encode_image(transformed_images)
+        with autocast(device_type=self.device.type, dtype=torch.float16):
+            image_embeddings = self.model.encode_image(transformed_images)
 
         # 返回图像嵌入
         return image_embeddings

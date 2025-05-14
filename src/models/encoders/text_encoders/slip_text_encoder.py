@@ -2,6 +2,7 @@ from typing import List
 
 import open_clip
 import torch
+from torch import autocast
 
 from src.models.encoders.base_encoders import BaseTextEncoder
 from src.models.utils.model_utils import freeze_model
@@ -22,11 +23,8 @@ class SigLIPTextEncoder(BaseTextEncoder):
     @torch.no_grad()
     def _forward(self, texts: List[str]) -> torch.Tensor:
         inputs = self.tokenizer(texts).to(self.device)
-        inputs = {
-            k: v.to(self.device)
-            for k, v in inputs.items()
-        }
-        text_embeddings = self.model.encode_text(**inputs)
+        with autocast(device_type=self.device.type, dtype=torch.float16):
+            text_embeddings = self.model.encode_text(inputs)
         return text_embeddings
 
     @property
