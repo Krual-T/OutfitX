@@ -15,6 +15,7 @@ class SigLIPTextEncoder(BaseTextEncoder):
             freeze: bool = True
     ):
         super().__init__()
+        self.model_name_or_path = model_name_or_path
         self.model, _, _ = open_clip.create_model_and_transforms(model_name_or_path)
         self.model.eval()
         if freeze:
