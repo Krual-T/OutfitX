@@ -8,7 +8,7 @@ from .base_train_config import BaseTrainConfig
 class CompatibilityPredictionTrainConfig(BaseTrainConfig):
     find_unused_parameters = True
     batch_size: int = 2048
-    dataloader_workers: int = 4
+    dataloader_workers: int = 2
     polyvore_type: Literal['nondisjoint', 'disjoint'] = 'nondisjoint'
     run_name: str = 'compatibility_prediction'
     auto_save_checkpoint: bool = True
