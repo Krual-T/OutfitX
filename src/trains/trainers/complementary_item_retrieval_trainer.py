@@ -222,7 +222,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         if self.run_mode == 'train-valid':
             ckpt_path = self.cfg.checkpoint_dir.parent / 'compatibility_prediction' / f'{ckpt_name_prefix}_best_AUC.pth'
         elif self.run_mode == 'test':
-            ckpt_path = self.cfg.checkpoint_dir / f'{ckpt_name_prefix}_best_loss.pth'
+            ckpt_path = self.cfg.checkpoint_dir / f'{ckpt_name_prefix}_best_Recall@10.pth'
         else:
             raise ValueError("未知的运行模式")
         self.load_checkpoint(ckpt_path=ckpt_path, only_load_model=True)
