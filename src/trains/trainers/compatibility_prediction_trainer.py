@@ -1,10 +1,10 @@
 import pickle
 import numpy as np
 import torch
-from sklearn.metrics import roc_auc_score
 
+from sklearn.metrics import roc_auc_score
 from torch import nn
-from typing import Optional, Literal, cast
+from typing import Optional, Literal, cast, Union
 from torch.amp import autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -17,7 +17,6 @@ from src.trains.configs.compatibility_prediction_train_config import Compatibili
 from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityPredictionDataset
 from src.trains.trainers.distributed_trainer import DistributedTrainer
-from torchmetrics.classification import BinaryAUROC, BinaryPrecision, BinaryRecall, BinaryF1Score, BinaryAccuracy
 
 class CompatibilityPredictionTrainer(DistributedTrainer):
 
@@ -26,14 +25,9 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             cfg = CompatibilityPredictionTrainConfig()
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.cfg = cast(CompatibilityPredictionTrainConfig, cfg)
-        self.loss:FocalLoss = None
-        # 所有指标提前初始化一次，可以放在模型或 Trainer 中复用
-        self.auroc_metric:BinaryAUROC = None
-        self.precision_metric:BinaryPrecision = None
-        self.recall_metric:BinaryRecall = None
-        self.f1_metric:BinaryF1Score = None
-        self.accuracy_metric:BinaryAccuracy = None
+        self.loss:Union[FocalLoss,None] = None
         self.device_type = None
+        self.model_cfg = OutfitTransformerConfig()
         self.best_metrics = {
             'AUC': 0.0,
             'Precision': 0.0,
@@ -195,7 +189,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
     @torch.no_grad()
     def test(self):
-        ckpt_name_prefix = self.model.cfg.model_name
+        ckpt_name_prefix = self.model_cfg.model_name
         ckpt_path = self.cfg.checkpoint_dir / f'{ckpt_name_prefix}_best_AUC.pth'
         self.load_checkpoint(ckpt_path=ckpt_path, only_load_model=True)
         self.model.eval()
@@ -237,7 +231,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         )
 
     def setup_train_and_valid_dataloader(self):
-        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         train_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
@@ -298,7 +292,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         )
 
     def setup_test_dataloader(self):
-        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         test_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
@@ -316,23 +310,12 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         )
 
     def hook_after_setup(self):
-        # 所有指标提前初始化一次，可以放在模型或 Trainer 中复用
-        self.auroc_metric = BinaryAUROC().to(self.local_rank)  # 或 device
-        self.precision_metric = BinaryPrecision().to(self.local_rank)
-        self.recall_metric = BinaryRecall().to(self.local_rank)
-        self.f1_metric = BinaryF1Score().to(self.local_rank)
-        self.accuracy_metric = BinaryAccuracy().to(self.local_rank)
         self.device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
         if self.world_size >1 and self.run_mode == 'test':
             raise ValueError("测试模式下不支持分布式")
-        self.model = cast(
-            OutfitTransformer,
-            self.model
-        )
 
     def load_model(self) -> nn.Module:
-        cfg = OutfitTransformerConfig()
-        return OutfitTransformer(cfg=cfg)
+        return OutfitTransformer(cfg=self.model_cfg)
 
     def load_embeddings(self,embed_file_prefix:str="embedding_subset_") -> dict:
         """
@@ -517,7 +500,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             best = self.best_metrics.get(metric, sign * np.inf)
             if metric_value * sign < best * sign:
                 self.best_metrics[metric] = metric_value
-                ckpt_name = f"{self.model.cfg.model_name}_best_{metric}"
+                ckpt_name = f"{self.model_cfg.model_name}_best_{metric}"
                 self.save_checkpoint(ckpt_name=ckpt_name,epoch=epoch)
                 self.log(
                     level='info',
