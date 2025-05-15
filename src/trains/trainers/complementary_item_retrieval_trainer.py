@@ -120,13 +120,16 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         all_y_hats = torch.cat(all_y_hats,dim=0)
         metrics = {
             'loss': total_loss.item() / len(self.valid_dataloader),
-            **self.compute_recall_metrics(
-                top_k_list=top_k_list,
-                dataloader=self.valid_dataloader,
-                y_hats=all_y_hats,
-                pos_item_ids=all_pos_item_ids
-            )
         }
+        if (epoch+1)%5 == 0 or epoch>=150:
+            metrics.update(
+                self.compute_recall_metrics(
+                    top_k_list=top_k_list,
+                    dataloader=self.valid_dataloader,
+                    y_hats=all_y_hats,
+                    pos_item_ids=all_pos_item_ids
+                )
+            )
         self.try_save_checkpoint(metrics=metrics, epoch=epoch)
         metrics = {
             'epoch':epoch,
@@ -217,7 +220,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         pos_item_ids: List[int],
         split_parts: int = 4  # 🔥 把 batch 分成几块处理
     ):
-        y_hats = y_hats.clone().detach().cpu()
+        y_hats = y_hats.clone().detach()
         dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
         candidate_pools = dataset.candidate_pools
         metrics = {f"Recall@{k}": 0.0 for k in top_k_list}
@@ -240,7 +243,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 candidate_embeddings.append(pool['embeddings'])  # [Pool_size, D]
                 ground_true_index.append(pool['index'][item_id])
 
-            candidate_pool_tensor = torch.stack(candidate_embeddings, dim=0)  # [B, Pool_size, D]
+            candidate_pool_tensor = torch.stack(candidate_embeddings, dim=0).to(self.local_rank)  # [B, Pool_size, D]
             query_expanded = y_chunk.unsqueeze(1)  # [B, 1, D]
             distances = torch.norm(candidate_pool_tensor - query_expanded, dim=-1)  # [B, Pool_size]
             top_k_index = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [B, K]
