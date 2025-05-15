@@ -5,7 +5,7 @@ from src.trains.configs import BaseTrainConfig
 
 class ComplementaryItemRetrievalTrainConfig(BaseTrainConfig):
     find_unused_parameters = True
-    batch_size: int = 512
+    batch_size: int = 4096
     dataloader_workers: int = 4
     polyvore_type: Literal['nondisjoint', 'disjoint'] = 'nondisjoint'
     run_name: str = 'complementary_item_retrieval'
