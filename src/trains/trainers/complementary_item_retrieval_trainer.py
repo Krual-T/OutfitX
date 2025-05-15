@@ -97,12 +97,12 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             total_loss += original_loss
             metrics = {
                 'loss': original_loss.item(),
-                **self.compute_recall_metrics(
-                    top_k_list=top_k_list,
-                    dataloader=self.valid_dataloader,
-                    y_hats=y_hats,
-                    pos_item_ids=pos_item_['ids']
-                )
+                # **self.compute_recall_metrics(
+                #     top_k_list=top_k_list,
+                #     dataloader=self.valid_dataloader,
+                #     y_hats=y_hats,
+                #     pos_item_ids=pos_item_['ids']
+                # )
             }
             metrics = {
                 'batch_step': epoch * len(self.valid_dataloader) + step,
