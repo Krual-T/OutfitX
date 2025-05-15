@@ -121,7 +121,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         metrics = {
             'loss': total_loss.item() / len(self.valid_dataloader),
         }
-        if (epoch+1)%5 == 0 or epoch>=150:
+        if epoch==0 or (epoch+1)%5 == 0 or epoch>=150:
             metrics.update(
                 self.compute_recall_metrics(
                     top_k_list=top_k_list,
@@ -248,7 +248,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             distances = torch.norm(candidate_pool_tensor - query_expanded, dim=-1)  # [B, Pool_size]
             top_k_index = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [B, K]
 
-            ground_true_tensor = torch.tensor(ground_true_index, dtype=torch.long)
+            ground_true_tensor = torch.tensor(ground_true_index, dtype=torch.long,device=self.local_rank)
 
             for k in top_k_list:
                 hits = (top_k_index[:, :k] == ground_true_tensor.unsqueeze(1)).any(dim=1).float().sum().item()
