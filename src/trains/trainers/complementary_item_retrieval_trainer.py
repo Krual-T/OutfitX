@@ -368,6 +368,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
+            persistent_workers=True,
             collate_fn=PolyvoreComplementaryItemRetrievalDataset.train_collate_fn
         )
 
@@ -389,6 +390,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
+            persistent_workers=True,
             collate_fn=PolyvoreComplementaryItemRetrievalDataset.valid_collate_fn
         )
 
