@@ -61,8 +61,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     loss = loss / self.cfg.accumulation_steps
 
                 self.scaler.scale(loss).backward()
-
-                if (step + 1) % self.cfg.accumulation_steps == 0:
+                update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step+1) == len(self.train_dataloader))
+                if update_grad:
                     self.scaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 

@@ -43,12 +43,15 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 )
                 original_loss = loss.clone().detach()
             self.scaler.scale(loss).backward()
-            self.scaler.unscale_(self.optimizer)
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-            self.optimizer.zero_grad()
-            self.scheduler.step()
+            update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step + 1) == len(self.train_dataloader))
+            if update_grad:
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
+                self.scheduler.step()
             total_loss += original_loss
             metrics = {
                 'batch_step': epoch * len(self.train_dataloader) + step,
