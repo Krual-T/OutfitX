@@ -96,7 +96,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 original_loss = loss.clone().detach()
             total_loss += original_loss
             metrics = {
-                'loss': original_loss.item()
+                'loss': original_loss.item(),
                 **self.compute_recall_metrics(
                     top_k_list=top_k_list,
                     dataloader=self.valid_dataloader,
