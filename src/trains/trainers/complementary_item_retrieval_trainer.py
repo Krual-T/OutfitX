@@ -218,7 +218,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         dataloader: DataLoader,
         y_hats: torch.Tensor,
         pos_item_ids: List[int],
-        split_parts: int = 4  # 🔥 把 batch 分成几块处理
+        split_parts: int = 10  # 🔥 把 batch 分成几块处理
     ):
         y_hats = y_hats.clone().detach()
         dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
