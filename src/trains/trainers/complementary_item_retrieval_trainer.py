@@ -42,6 +42,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                     batch_negative_samples=neg_items_emb_tensors.to(self.local_rank),
                 )
                 original_loss = loss.clone().detach()
+                loss = loss / self.cfg.accumulation_steps
             self.scaler.scale(loss).backward()
             update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step + 1) == len(self.train_dataloader))
             if update_grad:
