@@ -145,7 +145,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         y_hats: torch.Tensor,
         pos_item_ids: List[int]
     ):
-        y_hats = y_hats.clone().detach()
+        y_hats = y_hats.clone().detach().cpu()
         dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
         candidate_pools = dataset.candidate_pools
         metrics = {}
@@ -157,9 +157,9 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             candidate_pool = candidate_pools[c_id]
             candidate_embeddings.append(candidate_pool['embeddings']) # [Pool_size, D]
             ground_true_index.append(candidate_pool['index'][item_id])
-        candidate_pool_tensor = torch.stack(candidate_embeddings,dim=0).cpu() # [B, Pool_size, D]
-        ground_true_index_tensor = torch.tensor(ground_true_index,dtype=torch.long).cpu()
-        query_expanded = y_hats.unsqueeze(1).cpu()  # [B, 1, D]
+        candidate_pool_tensor = torch.stack(candidate_embeddings,dim=0) # [B, Pool_size, D]
+        ground_true_index_tensor = torch.tensor(ground_true_index,dtype=torch.long)
+        query_expanded = y_hats.unsqueeze(1)  # [B, 1, D]
         distances = torch.norm(candidate_pool_tensor - query_expanded, dim=-1)
         top_k_index = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [B, K]
 
