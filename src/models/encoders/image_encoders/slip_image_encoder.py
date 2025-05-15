@@ -12,15 +12,17 @@ from src.models.utils.model_utils import freeze_model
 class SigLIPImageEncoder(BaseImageEncoder):
     def __init__(
             self,
-            model_name_or_path: str = "hf-hub:Marqo/marqo-fashionSigLIP",
-            freeze: bool = True
+            model_context: Dict[str, Any],
     ):
         super().__init__()
-        self.model_name_or_path = model_name_or_path
-        self.model,_,self.transforms = open_clip.create_model_and_transforms(model_name_or_path)
-        self.model.eval()
-        if freeze:
-            freeze_model(self.model)
+        self.model_name_or_path = model_context.get('model_name_or_path',"hf-hub:Marqo/marqo-fashionSigLIP")
+
+        if ('model' not in model_context) or ('preprocess_val' not in model_context):
+            self.model, _, self.transforms = open_clip.create_model_and_transforms(self.model_name_or_path)
+        else:
+            self.model = model_context.get('model')
+            self.transforms = model_context.get('preprocess_val')
+
     def processor(self, images: List[Union[np.ndarray, Image.Image]]):
         return torch.stack(
             [

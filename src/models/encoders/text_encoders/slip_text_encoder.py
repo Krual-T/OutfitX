@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict, Any
 
 import open_clip
 import torch
@@ -11,16 +11,19 @@ from src.models.utils.model_utils import freeze_model
 class SigLIPTextEncoder(BaseTextEncoder):
     def __init__(
             self,
-            model_name_or_path: str = "hf-hub:Marqo/marqo-fashionSigLIP",
-            freeze: bool = True
+            model_context: Dict[str, Any],
     ):
         super().__init__()
-        self.model_name_or_path = model_name_or_path
-        self.model, _, _ = open_clip.create_model_and_transforms(model_name_or_path)
-        self.model.eval()
-        if freeze:
+        self.model_name_or_path = model_context.get('model_name_or_path',"hf-hub:Marqo/marqo-fashionSigLIP")
+        if 'model' not in model_context:
+            self.model = open_clip.create_model(self.model_name_or_path)
+            self.model.eval()
             freeze_model(self.model)
-        self.tokenizer = open_clip.get_tokenizer(model_name_or_path)
+        else:
+            self.model = model_context.get('model')
+        self.tokenizer = model_context.get('tokenizer', open_clip.get_tokenizer(self.model_name_or_path))
+
+
     @torch.no_grad()
     def _forward(self, texts: List[str]) -> torch.Tensor:
         inputs = self.tokenizer(texts).to(self.device)
