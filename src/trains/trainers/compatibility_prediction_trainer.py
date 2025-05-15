@@ -501,7 +501,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             if metric_value * sign < best * sign:
                 self.best_metrics[metric] = metric_value
                 ckpt_name = f"{self.model_cfg.model_name}_best_{metric}"
-                self.save_checkpoint(ckpt_name=ckpt_name,epoch=epoch)
+                self.save_checkpoint(ckpt_name=ckpt_name,epoch=epoch, model_cfg_dict=self.model_cfg.__dict__)
                 self.log(
                     level='info',
                     msg=f"✅ New best {metric}: {metric_value:.4f}, saved as {ckpt_name}.pth"
