@@ -256,6 +256,8 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
 
         return metrics
     def try_save_checkpoint(self, metrics: Dict[str, float], epoch: int):
+        if epoch<=150:
+            return
         for metric,metric_value in metrics.items():
             sign = 1 if metric=='loss' else -1
             best = self.best_metrics.get(metric, sign * np.inf)
