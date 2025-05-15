@@ -155,9 +155,9 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         for item_id in pos_item_ids:
             c_id = dataset.metadata[item_id]['category_id']
             candidate_pool = candidate_pools[c_id]
-            candidate_embeddings.append(candidate_pool['embeddings'].to(self.local_rank)) # [Pool_size, D]
+            candidate_embeddings.append(candidate_pool['embeddings']) # [Pool_size, D]
             ground_true_index.append(candidate_pool['index'][item_id])
-        candidate_pool_tensor = torch.stack(candidate_embeddings,dim=0) # [B, Pool_size, D]
+        candidate_pool_tensor = torch.stack(candidate_embeddings,dim=0).to(self.local_rank) # [B, Pool_size, D]
         ground_true_index_tensor = torch.tensor(ground_true_index,dtype=torch.long, device=self.local_rank)
 
         query_expanded = y_hats.unsqueeze(1)  # [B, 1, D]
