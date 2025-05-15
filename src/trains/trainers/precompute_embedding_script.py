@@ -23,6 +23,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
             cfg = PrecomputeEmbeddingConfig()
         super().__init__(cfg=cfg, run_mode='custom')
         self.cfg = cfg
+        self.model_cfg = OutfitTransformerConfig()
         self.item_dataloader = None
     @torch.no_grad()
     def custom_task(self, *args, **kwargs):
@@ -44,7 +45,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         all_embeddings = np.concatenate(all_embeddings, axis=0)
         precomputed_embedding_dir = self.cfg.precomputed_embedding_dir
         os.makedirs(precomputed_embedding_dir, exist_ok=True)
-        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         save_path = precomputed_embedding_dir / f'{prefix}{self.rank}.pkl'
         with open(save_path, 'wb') as f:
             pickle.dump({'ids': all_ids, 'embeddings': all_embeddings}, f)
@@ -69,8 +70,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         )
 
     def load_model(self) -> nn.Module:
-        cfg = OutfitTransformerConfig()
-        return OutfitTransformer(cfg=cfg)
+        return OutfitTransformer(cfg=self.model_cfg)
 
     def load_optimizer(self) -> torch.optim.Optimizer:
         pass

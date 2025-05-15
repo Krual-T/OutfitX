@@ -25,6 +25,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.device_type = None
         self.best_metrics = {}
+        self.model_cfg = OutfitTransformerConfig()
 
     def train_epoch(self, epoch):
         self.model.train()
@@ -170,7 +171,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             best = self.best_metrics.get(metric, sign * np.inf)
             if metric_value * sign < best * sign:
                 self.best_metrics[metric] = metric_value
-                ckpt_name = f"{self.model.cfg.model_name}_best_{metric}"
+                ckpt_name = f"{self.model_cfg.model_name}_best_{metric}"
                 self.save_checkpoint(ckpt_name=ckpt_name,epoch=epoch)
                 self.log(
                     level='info',
@@ -213,7 +214,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         )
         if self.world_size > 1 and self.run_mode == 'test':
             raise ValueError("测试模式下不支持分布式")
-        ckpt_name_prefix = self.model.cfg.model_name
+        ckpt_name_prefix = self.model_cfg.model_name
         if self.run_mode == 'train-valid':
             ckpt_path = self.cfg.checkpoint_dir.parent / 'compatibility_prediction' / f'{ckpt_name_prefix}_best_AUC.pth'
         elif self.run_mode == 'test':
@@ -229,8 +230,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         )
 
     def load_model(self) -> nn.Module:
-        cfg = OutfitTransformerConfig()
-        return OutfitTransformer(cfg=cfg)
+        return OutfitTransformer(cfg=self.model_cfg)
 
     def load_optimizer(self) -> torch.optim.Optimizer:
         return torch.optim.AdamW(self.model.parameters(), lr=self.cfg.learning_rate)
@@ -251,7 +251,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         return torch.amp.GradScaler()
 
     def setup_train_and_valid_dataloader(self, sample_mode: Literal['easy','hard']='easy'):
-        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         self.setup_train_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
         self.setup_valid_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
@@ -298,7 +298,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         )
 
     def setup_test_dataloader(self):
-        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         test_dataset = PolyvoreComplementaryItemRetrievalDataset(
             polyvore_type=self.cfg.polyvore_type,
