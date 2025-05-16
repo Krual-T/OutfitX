@@ -189,7 +189,8 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         gt_index_tensor = torch.tensor(gt_padded,dtype=torch.long,device=self.local_rank) #  after padded [C, max_len]
         mask_tensor = torch.tensor(mask,dtype=torch.bool,device=self.local_rank)
 
-        dists = torch.cdist(category_to_queries_tensor_padded, candidate_tensors)  # [C, max_len, 3000]
+        with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
+            dists = torch.cdist(category_to_queries_tensor_padded, candidate_tensors)  # [C, max_len, 3000]
         top_k_index = torch.topk(dists, k=max(top_k_list), largest=False).indices  # [C, max_len, K] k 个 index
 
         metrics = defaultdict(float)
