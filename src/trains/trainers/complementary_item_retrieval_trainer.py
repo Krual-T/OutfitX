@@ -1,4 +1,5 @@
 import pickle
+from collections import defaultdict
 from typing import cast, Literal, List, Dict
 
 import numpy as np
@@ -140,124 +141,109 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             msg=str(metrics),
             metrics=metrics
         )
-
-    # @torch.no_grad()
-    # def compute_recall_metrics(
-    #     self,
-    #     top_k_list: List[int],
-    #     dataloader: DataLoader,
-    #     y_hats: torch.Tensor,
-    #     pos_item_ids: List[int]
-    # ):
-    #     y_hats = y_hats.clone().detach().cpu()
-    #     dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
-    #     candidate_pools = dataset.candidate_pools
-    #
-    #     metrics = {f"Recall@{k}": 0 for k in top_k_list}
-    #     total = len(y_hats)
-    #
-    #     for i, item_id in enumerate(pos_item_ids):
-    #         query = y_hats[i]  # [D]
-    #         c_id = dataset.metadata[item_id]['category_id']
-    #         candidate_pool = candidate_pools[c_id]
-    #
-    #         pool_embeddings = candidate_pool['embeddings'].cpu()  # [Pool, D]
-    #         gt_index = candidate_pool['index'][item_id]
-    #
-    #         # 计算当前 query 与该类别候选集的欧几里得距离
-    #         distances = torch.norm(pool_embeddings - query.unsqueeze(0), dim=-1)  # [Pool]
-    #
-    #         # Top-K 最近邻索引
-    #         topk_indices = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [K]
-    #
-    #         for k in top_k_list:
-    #             if gt_index in topk_indices[:k]:
-    #                 metrics[f"Recall@{k}"] += 1
-    #
-    #         # 释放资源
-    #         del pool_embeddings, distances, topk_indices
-    #
-    #     # 平均 recall
-    #     for k in top_k_list:
-    #         metrics[f"Recall@{k}"] /= total
-    #
-    #     return metrics
-    # def compute_recall_metrics(
-    #     self,
-    #     top_k_list: List[int],
-    #     dataloader: DataLoader,
-    #     y_hats: torch.Tensor,
-    #     pos_item_ids: List[int]
-    # ):
-    #     y_hats = y_hats.clone().detach()
-    #     dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
-    #     candidate_pools = dataset.candidate_pools
-    #     metrics = {}
-    #
-    #     candidate_embeddings = []
-    #     ground_true_index = []
-    #     for item_id in pos_item_ids:
-    #         c_id = dataset.metadata[item_id]['category_id']
-    #         candidate_pool = candidate_pools[c_id]
-    #         candidate_embeddings.append(candidate_pool['embeddings']) # [Pool_size, D]
-    #         ground_true_index.append(candidate_pool['index'][item_id])
-    #     candidate_pool_tensor = torch.stack(candidate_embeddings,dim=0).to(self.local_rank) # [B, Pool_size, D]
-    #     ground_true_index_tensor = torch.tensor(ground_true_index,dtype=torch.long, device=self.local_rank)
-    #
-    #     query_expanded = y_hats.unsqueeze(1)  # [B, 1, D]
-    #     distances = torch.norm(candidate_pool_tensor - query_expanded, dim=-1)
-    #     top_k_index = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [B, K]
-    #
-    #     for k in top_k_list:
-    #         hits = (top_k_index[:, :k] == ground_true_index_tensor.unsqueeze(1)).any(dim=1).float().sum().item()
-    #         metrics[f"Recall@{k}"] = hits / y_hats.size(0)
-    #     return metrics
     def compute_recall_metrics(
         self,
         top_k_list: List[int],
         dataloader: DataLoader,
         y_hats: torch.Tensor,
-        pos_item_ids: List[int],
-        split_parts: int = 10  # 🔥 把 batch 分成几块处理
+        pos_item_ids: List[int]
     ):
         y_hats = y_hats.clone().detach()
         dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
         candidate_pools = dataset.candidate_pools
-        metrics = {f"Recall@{k}": 0.0 for k in top_k_list}
-        total = len(y_hats)
 
-        # 自动计算每块大小
-        split_batch_size = (total + split_parts - 1) // split_parts  # 向上取整
+        category_to_queries = defaultdict(list)
+        category_to_gt = defaultdict(list)
 
-        for start in range(0, total, split_batch_size):
-            end = min(start + split_batch_size, total)
-            y_chunk = y_hats[start:end]
-            pos_ids_chunk = pos_item_ids[start:end]
+        for i,item_id in enumerate(pos_item_ids):
+            c_id = dataset.metadata[item_id]['category_id']
+            category_to_queries[c_id].append(y_hats[i].cpu())
+            category_to_gt[c_id].append(candidate_pools[c_id]['index'][item_id])
 
-            candidate_embeddings = []
-            ground_true_index = []
+        max_length = max(len(queries) for queries in category_to_queries.values())
 
-            for item_id in pos_ids_chunk:
-                c_id = dataset.metadata[item_id]['category_id']
-                pool = candidate_pools[c_id]
-                candidate_embeddings.append(pool['embeddings'])  # [Pool_size, D]
-                ground_true_index.append(pool['index'][item_id])
+        category_to_queries_padded = []
+        candidate_tensors = []
+        gt_padded = []
+        mask = []
+        for c_id,queries in category_to_queries.items():
+            qs_tensor = torch.stack(queries,dim=0)
+            q_length = qs_tensor.shape[0]
+            category_to_queries_padded.append(
+                torch.nn.functional.pad(
+                    queries,
+                    (0,0,0,max_length-q_length),
+                    value=0
+                ).to(self.local_rank)
+            )
+            candidate_tensors.append(
+                torch.tensor(candidate_pools[c_id]['embeddings'],dtype=torch.float,device=self.local_rank)
+            )
+            gt_padded.append(
+                category_to_gt[c_id]+[-1]*(max_length-q_length)
+            )
+            mask.append([1]*q_length+[0]*(max_length-q_length))
 
-            candidate_pool_tensor = torch.stack(candidate_embeddings, dim=0).to(self.local_rank)  # [B, Pool_size, D]
-            query_expanded = y_chunk.unsqueeze(1)  # [B, 1, D]
-            distances = torch.norm(candidate_pool_tensor - query_expanded, dim=-1)  # [B, Pool_size]
-            top_k_index = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [B, K]
+        category_to_queries_tensor_padded = torch.stack(category_to_queries_padded,dim=0)
+        candidate_tensors = torch.stack(candidate_tensors,dim=0)
+        gt_index_tensor = torch.tensor(gt_padded,dtype=torch.long,device=self.local_rank) #  after padded [C, max_len]
+        mask_tensor = torch.tensor(mask,dtype=torch.bool,device=self.local_rank)
 
-            ground_true_tensor = torch.tensor(ground_true_index, dtype=torch.long,device=self.local_rank)
+        dists = torch.cdist(category_to_queries_tensor_padded, candidate_tensors)  # [C, max_len, 3000]
+        top_k_index = torch.topk(dists, k=max(top_k_list), largest=False).indices  # [C, max_len, K] k 个 index
 
-            for k in top_k_list:
-                hits = (top_k_index[:, :k] == ground_true_tensor.unsqueeze(1)).any(dim=1).float().sum().item()
-                metrics[f"Recall@{k}"] += hits
-
+        metrics = defaultdict(float)
         for k in top_k_list:
-            metrics[f"Recall@{k}"] /= total  # 平均化结果
+            hits = (mask_tensor&(top_k_index[:, :, :k] == gt_index_tensor.unsqueeze(-1))).any(dim=-1).float()
+            metric = f'Recall@{k}'
+            metrics[metric] = hits.sum().item() / mask_tensor.sum().item()
 
-        return metrics
+    # def compute_recall_metrics(
+    #     self,
+    #     top_k_list: List[int],
+    #     dataloader: DataLoader,
+    #     y_hats: torch.Tensor,
+    #     pos_item_ids: List[int],
+    #     split_parts: int = 10  # 🔥 把 batch 分成几块处理
+    # ):
+    #     y_hats = y_hats.clone().detach()
+    #     dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
+    #     candidate_pools = dataset.candidate_pools
+    #     metrics = {f"Recall@{k}": 0.0 for k in top_k_list}
+    #     total = len(y_hats)
+    #
+    #     # 自动计算每块大小
+    #     split_batch_size = (total + split_parts - 1) // split_parts  # 向上取整
+    #
+    #     for start in range(0, total, split_batch_size):
+    #         end = min(start + split_batch_size, total)
+    #         y_chunk = y_hats[start:end]
+    #         pos_ids_chunk = pos_item_ids[start:end]
+    #
+    #         candidate_embeddings = []
+    #         ground_true_index = []
+    #
+    #         for item_id in pos_ids_chunk:
+    #             c_id = dataset.metadata[item_id]['category_id']
+    #             pool = candidate_pools[c_id]
+    #             candidate_embeddings.append(pool['embeddings'])  # [Pool_size, D]
+    #             ground_true_index.append(pool['index'][item_id])
+    #
+    #         candidate_pool_tensor = torch.stack(candidate_embeddings, dim=0).to(self.local_rank)  # [B, Pool_size, D]
+    #         query_expanded = y_chunk.unsqueeze(1)  # [B, 1, D]
+    #         distances = torch.norm(candidate_pool_tensor - query_expanded, dim=-1)  # [B, Pool_size]
+    #         top_k_index = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [B, K]
+    #
+    #         ground_true_tensor = torch.tensor(ground_true_index, dtype=torch.long,device=self.local_rank)
+    #
+    #         for k in top_k_list:
+    #             hits = (top_k_index[:, :k] == ground_true_tensor.unsqueeze(1)).any(dim=1).float().sum().item()
+    #             metrics[f"Recall@{k}"] += hits
+    #
+    #     for k in top_k_list:
+    #         metrics[f"Recall@{k}"] /= total  # 平均化结果
+    #
+    #     return metrics
     def try_save_checkpoint(self, metrics: Dict[str, float], epoch: int):
         if epoch<=150:
             return
