@@ -171,7 +171,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             q_length = qs_tensor.shape[0]
             category_to_queries_padded.append(
                 torch.nn.functional.pad(
-                    queries,
+                    qs_tensor,
                     (0,0,0,max_length-q_length),
                     value=0
                 ).to(self.local_rank)
