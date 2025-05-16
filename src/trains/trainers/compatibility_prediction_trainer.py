@@ -331,7 +331,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         all_embeddings = []
 
         for file in files:
-            with open(file, 'rb') as f:
+            with open(file, 'rb',encoding='utf-8') as f:
                 data = pickle.load(f)
                 all_ids.extend(data['ids'])
                 all_embeddings.append(data['embeddings'])

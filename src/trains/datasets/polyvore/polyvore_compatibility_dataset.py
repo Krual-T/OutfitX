@@ -24,7 +24,7 @@ class PolyvoreCompatibilityPredictionDataset(PolyvoreItemDataset):
             load_image=load_image
         )
         cp_dataset_path = dataset_dir / polyvore_type / 'compatibility' /f'{mode}.json'
-        with open(cp_dataset_path, 'r') as f:
+        with open(cp_dataset_path, 'r',encoding='utf-8') as f:
             self.cp_dataset = json.load(f)
 
     def __len__(self):
