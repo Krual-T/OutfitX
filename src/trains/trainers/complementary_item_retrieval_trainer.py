@@ -276,7 +276,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         all_y_hats = torch.cat(all_y_hats, dim=0)
         metrics = self.compute_recall_metrics(
                 top_k_list=top_k_list,
-                dataloader=self.valid_dataloader,
+                dataloader=self.test_dataloader,
                 y_hats=all_y_hats,
                 pos_item_ids=all_pos_item_ids
             )
