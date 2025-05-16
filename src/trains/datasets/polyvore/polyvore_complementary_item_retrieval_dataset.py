@@ -40,8 +40,8 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
         self.large_categories = self.__get_large_categories()
         self.cir_dataset = self.__load_split_dataset()
-        self.negative_pool = self.__build_negative_pool()
-        self.candidate_pools = self.__build_candidate_pool() if self.mode != 'train' else {}
+        # self.negative_pool = self.__build_negative_pool()
+        # self.candidate_pools = self.__build_candidate_pool() if self.mode != 'train' else {}
 
 
     def __len__(self):
@@ -68,7 +68,7 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
     def __load_split_dataset(self) -> List[dict]:
         path = self.dataset_dir / self.polyvore_type / f'{self.mode}.json'
-        with open(path, 'r') as f:
+        with open(path, 'r',encoding='utf-8') as f:
             raw_data = json.load(f)
         result = []
         for outfit in raw_data:
@@ -111,7 +111,7 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
     def __build_candidate_pool(self) -> dict:
         candidate_max_size = 3000
         candidate_pool = {}
-
+        # set item_id集合
         split_item_ids = {iid for sample in self.cir_dataset for iid in sample["item_ids"]}
         category_to_all = defaultdict(list)
         category_to_split = defaultdict(set)
@@ -533,3 +533,62 @@ class TestTestDataset(TestCase):
             print(f"❌ 以下大类没有在 test 中出现：{sorted(uncovered_categories)}")
         else:
             print("🎉 test 中覆盖了全部大类！")
+
+class TestTrainAndTestDataset(TestCase):
+    def test_train_and_test_dataset(self):
+        """
+        train and test 在item_id级别是否有重合
+        :return:
+        """
+        dataset_dir = ROOT_DIR / 'datasets' / 'polyvore'
+        train_path = dataset_dir / "nondisjoint" / "train.json"
+        test_path = dataset_dir / "nondisjoint" / "test.json"
+        with open(train_path, 'r', encoding='utf-8') as f:
+            train_outfits = json.load(f)
+        with open(test_path, 'r', encoding='utf-8') as f:
+            test_outfits = json.load(f)
+
+        # 收集所有 item_id
+        train_ids = {iid for outfit in train_outfits for iid in outfit['item_ids']}
+        test_ids = {iid for outfit in test_outfits for iid in outfit['item_ids']}
+
+        # 计算交集
+        overlap = train_ids & test_ids
+
+        print(f"✅ Train 集 item 数量: {len(train_ids)}")
+        print(f"✅ Test  集 item 数量: {len(test_ids)}")
+        print(f"🔥 Train/Test 重合 item 数量: {len(overlap)}")
+        if overlap:
+            print("🌟 重合示例（最多 10 个）：")
+            for iid in list(overlap)[:10]:
+                print("   -", iid)
+
+    def test_train_pos_and_test_pos(self):
+        def collect_pos_ids(polyvore_type: str, mode: str):
+            ds = PolyvoreComplementaryItemRetrievalDataset(
+                polyvore_type=polyvore_type,
+                mode=mode,
+                metadata=None,  # 会在父类里自动加载
+                embedding_dict=None,  # 用不到 embedding_dict
+                load_image=False
+            )
+            pos_ids = set()
+            # cir_dataset 每个 entry 都有 item_ids 和 positive_idx_list
+            for entry in ds.cir_dataset:
+                item_ids = entry['item_ids']
+                for idx in entry['positive_idx_list']:
+                    pos_ids.add(item_ids[idx])
+            return pos_ids
+
+        train_pos = collect_pos_ids('disjoint', 'train')
+        test_pos = collect_pos_ids('disjoint', 'test')
+
+        overlap = train_pos & test_pos
+
+        print(f"✅ Train 正样本数: {len(train_pos)}")
+        print(f"✅ Test  正样本数: {len(test_pos)}")
+        print(f"🔥 重合正样本数: {len(overlap)}")
+        if overlap:
+            print("🌟 示例重合 item_id（最多10个）：")
+            for iid in list(overlap)[:10]:
+                print(f"   - {iid}")
