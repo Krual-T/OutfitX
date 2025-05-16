@@ -36,7 +36,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
                 candidate_item_embeddings = candidate_item_embeddings.to(self.local_rank)  # [B,4,D]
                 dists = torch.cdist(y_hats_embedding, candidate_item_embeddings, p=2)
             y_hats_index = torch.argmin(dists, dim=-1)
-            y_hats_index = y_hats_index.to(self.local_rank)
+            y_index = y_index.to(self.local_rank)
             total += y_hats_index.size(0)
             correct += (y_hats_index == y_index).sum().item()
         metrics = {
