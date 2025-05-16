@@ -3,8 +3,6 @@ import pathlib
 from typing import Literal
 
 import torch
-from transformers.utils.import_utils import candidates
-
 from src.models.datatypes import OutfitComplementaryItemRetrievalTask
 from src.project_settings.info import PROJECT_DIR as ROOT_DIR
 from src.trains.datasets import PolyvoreItemDataset
