@@ -191,7 +191,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
     def test(self):
         ckpt_name_prefix = self.model_cfg.model_name
         # ckpt_path = self.cfg.checkpoint_dir / f'{ckpt_name_prefix}_best_AUC.pth'
-        ckpt_path = self.cfg.checkpoint_dir / 'complementary_item_retrieval' /f'{ckpt_name_prefix}_best_Recall@1.pth'
+        ckpt_path = self.cfg.checkpoint_dir.parent / 'complementary_item_retrieval' /f'{ckpt_name_prefix}_best_Recall@1.pth'
         self.load_checkpoint(ckpt_path=ckpt_path, only_load_model=True)
         self.model.eval()
         test_processor = tqdm(self.test_dataloader, desc='[Test] Compatibility Prediction')
