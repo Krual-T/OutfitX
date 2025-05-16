@@ -32,7 +32,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
         correct = 0
         for step, (queries, candidate_item_embeddings,y_index) in enumerate(test_dataloader_process):
             with autocast(device_type=self.device_type,enabled=self.cfg.use_amp):
-                y_hats_embedding = self.model(queries) # [B,D]
+                y_hats_embedding = self.model(queries).unsqueeze(1) # [B,1,D]
                 candidate_item_embeddings = candidate_item_embeddings.to(self.local_rank)  # [B,4,D]
                 dists = torch.cdist(y_hats_embedding, candidate_item_embeddings, p=2)
             y_hats_index = torch.argmin(dists, dim=-1)
