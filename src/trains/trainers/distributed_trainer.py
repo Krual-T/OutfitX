@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
-from typing import Dict, Any, Literal, final
+from typing import Dict, Any, Literal, final, cast, Union, Optional
 from src.trains.configs import BaseTrainConfig
 
 
@@ -170,18 +170,19 @@ class DistributedTrainer(ABC):
         self.local_rank = None
         self.rank = None
         self.world_size = None
-
-        self.model :nn.Module = None
-        self.optimizer:torch.optim.Optimizer = None
-        self.scheduler:torch.optim.lr_scheduler.LRScheduler = None
-        self.scaler:torch.amp.GradScaler = None
         self.logger = None
         self.wandb_run = None
         self._entered = False
-        self.train_dataloader:DataLoader = None
-        self.valid_dataloader:DataLoader = None
-        self.test_dataloader:DataLoader = None
-        self.loss = None
+
+        self.model: Union[DDP, None] = None
+        self.optimizer:Union[torch.optim.Optimizer, None] = None
+
+        self.scheduler:Optional[torch.optim.lr_scheduler.LRScheduler] = None
+        self.scaler:Optional[torch.amp.GradScaler] = None
+        self.train_dataloader:Optional[DataLoader] = None
+        self.valid_dataloader:Optional[DataLoader] = None
+        self.test_dataloader:Optional[DataLoader] = None
+        self.loss: Optional[nn.Module]= None
         # self.dataloader_workers = cfg.dataloader_workers
         # self.batch_size = cfg.batch_size
 
@@ -419,7 +420,8 @@ class DistributedTrainer(ABC):
         elif self.run_mode == 'custom':
             self.setup_custom_dataloader()
 
-    def save_checkpoint(self, epoch, ckpt_name = None):
+    def save_checkpoint(self, epoch, ckpt_name = None, model_cfg_dict:Optional[Dict[str,Any]] = None, *args, **kwargs):
+        ""
         """
         保存模型检查点，包括模型参数、优化器状态、学习率调节器状态、scaler状态。
         检查点文件名为 epoch_{epoch}.pth，保存在 cfg.checkpoint_dir 目录下。
@@ -438,7 +440,7 @@ class DistributedTrainer(ABC):
         checkpoint_path = checkpoint_dir / (f"epoch_{epoch}.pth" if ckpt_name is None else f"{ckpt_name}.pth")
         torch.save({
             'epoch': epoch,
-            'config': self.model.module.cfg.__dict__,
+            'config': model_cfg_dict if model_cfg_dict else None,
             'model': self.model.module.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'scheduler': self.scheduler.state_dict() if self.scheduler else None,

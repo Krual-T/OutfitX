@@ -25,6 +25,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.device_type = None
         self.best_metrics = {}
+        self.model_cfg = OutfitTransformerConfig()
 
     def train_epoch(self, epoch):
         self.model.train()
@@ -41,13 +42,17 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                     batch_negative_samples=neg_items_emb_tensors.to(self.local_rank),
                 )
                 original_loss = loss.clone().detach()
+                loss = loss / self.cfg.accumulation_steps
             self.scaler.scale(loss).backward()
-            self.scaler.unscale_(self.optimizer)
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-            self.optimizer.zero_grad()
-            self.scheduler.step()
+            update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step + 1) == len(self.train_dataloader))
+            if update_grad:
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
+                self.scheduler.step()
             total_loss += original_loss
             metrics = {
                 'batch_step': epoch * len(self.train_dataloader) + step,
@@ -91,13 +96,13 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 original_loss = loss.clone().detach()
             total_loss += original_loss
             metrics = {
-                'loss': original_loss.item()
-                **self.compute_recall_metrics(
-                    top_k_list=top_k_list,
-                    dataloader=self.valid_dataloader,
-                    y_hats=y_hats,
-                    pos_item_ids=pos_item_['ids']
-                )
+                'loss': original_loss.item(),
+                # **self.compute_recall_metrics(
+                #     top_k_list=top_k_list,
+                #     dataloader=self.valid_dataloader,
+                #     y_hats=y_hats,
+                #     pos_item_ids=pos_item_['ids']
+                # )
             }
             metrics = {
                 'batch_step': epoch * len(self.valid_dataloader) + step,
@@ -115,13 +120,16 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         all_y_hats = torch.cat(all_y_hats,dim=0)
         metrics = {
             'loss': total_loss.item() / len(self.valid_dataloader),
-            **self.compute_recall_metrics(
-                top_k_list=top_k_list,
-                dataloader=self.valid_dataloader,
-                y_hats=all_y_hats,
-                pos_item_ids=all_pos_item_ids
-            )
         }
+        if epoch==0 or (epoch+1)%5 == 0 or epoch>=150:
+            metrics.update(
+                self.compute_recall_metrics(
+                    top_k_list=top_k_list,
+                    dataloader=self.valid_dataloader,
+                    y_hats=all_y_hats,
+                    pos_item_ids=all_pos_item_ids
+                )
+            )
         self.try_save_checkpoint(metrics=metrics, epoch=epoch)
         metrics = {
             'epoch':epoch,
@@ -133,44 +141,132 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             metrics=metrics
         )
 
+    # @torch.no_grad()
+    # def compute_recall_metrics(
+    #     self,
+    #     top_k_list: List[int],
+    #     dataloader: DataLoader,
+    #     y_hats: torch.Tensor,
+    #     pos_item_ids: List[int]
+    # ):
+    #     y_hats = y_hats.clone().detach().cpu()
+    #     dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
+    #     candidate_pools = dataset.candidate_pools
+    #
+    #     metrics = {f"Recall@{k}": 0 for k in top_k_list}
+    #     total = len(y_hats)
+    #
+    #     for i, item_id in enumerate(pos_item_ids):
+    #         query = y_hats[i]  # [D]
+    #         c_id = dataset.metadata[item_id]['category_id']
+    #         candidate_pool = candidate_pools[c_id]
+    #
+    #         pool_embeddings = candidate_pool['embeddings'].cpu()  # [Pool, D]
+    #         gt_index = candidate_pool['index'][item_id]
+    #
+    #         # 计算当前 query 与该类别候选集的欧几里得距离
+    #         distances = torch.norm(pool_embeddings - query.unsqueeze(0), dim=-1)  # [Pool]
+    #
+    #         # Top-K 最近邻索引
+    #         topk_indices = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [K]
+    #
+    #         for k in top_k_list:
+    #             if gt_index in topk_indices[:k]:
+    #                 metrics[f"Recall@{k}"] += 1
+    #
+    #         # 释放资源
+    #         del pool_embeddings, distances, topk_indices
+    #
+    #     # 平均 recall
+    #     for k in top_k_list:
+    #         metrics[f"Recall@{k}"] /= total
+    #
+    #     return metrics
+    # def compute_recall_metrics(
+    #     self,
+    #     top_k_list: List[int],
+    #     dataloader: DataLoader,
+    #     y_hats: torch.Tensor,
+    #     pos_item_ids: List[int]
+    # ):
+    #     y_hats = y_hats.clone().detach()
+    #     dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
+    #     candidate_pools = dataset.candidate_pools
+    #     metrics = {}
+    #
+    #     candidate_embeddings = []
+    #     ground_true_index = []
+    #     for item_id in pos_item_ids:
+    #         c_id = dataset.metadata[item_id]['category_id']
+    #         candidate_pool = candidate_pools[c_id]
+    #         candidate_embeddings.append(candidate_pool['embeddings']) # [Pool_size, D]
+    #         ground_true_index.append(candidate_pool['index'][item_id])
+    #     candidate_pool_tensor = torch.stack(candidate_embeddings,dim=0).to(self.local_rank) # [B, Pool_size, D]
+    #     ground_true_index_tensor = torch.tensor(ground_true_index,dtype=torch.long, device=self.local_rank)
+    #
+    #     query_expanded = y_hats.unsqueeze(1)  # [B, 1, D]
+    #     distances = torch.norm(candidate_pool_tensor - query_expanded, dim=-1)
+    #     top_k_index = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [B, K]
+    #
+    #     for k in top_k_list:
+    #         hits = (top_k_index[:, :k] == ground_true_index_tensor.unsqueeze(1)).any(dim=1).float().sum().item()
+    #         metrics[f"Recall@{k}"] = hits / y_hats.size(0)
+    #     return metrics
     def compute_recall_metrics(
         self,
         top_k_list: List[int],
         dataloader: DataLoader,
         y_hats: torch.Tensor,
-        pos_item_ids: List[int]
+        pos_item_ids: List[int],
+        split_parts: int = 10  # 🔥 把 batch 分成几块处理
     ):
         y_hats = y_hats.clone().detach()
         dataset = cast(PolyvoreComplementaryItemRetrievalDataset, dataloader.dataset)
         candidate_pools = dataset.candidate_pools
-        metrics = {}
+        metrics = {f"Recall@{k}": 0.0 for k in top_k_list}
+        total = len(y_hats)
 
-        candidate_embeddings = []
-        ground_true_index = []
-        for item_id in pos_item_ids:
-            c_id = dataset.metadata[item_id]['category_id']
-            candidate_pool = candidate_pools[c_id]
-            candidate_embeddings.append(candidate_pool['embeddings'].to(self.local_rank)) # [Pool_size, D]
-            ground_true_index.append(candidate_pool['index'][item_id])
-        candidate_pool_tensor = torch.stack(candidate_embeddings,dim=0) # [B, Pool_size, D]
-        ground_true_index_tensor = torch.tensor(ground_true_index,dtype=torch.long, device=self.local_rank)
+        # 自动计算每块大小
+        split_batch_size = (total + split_parts - 1) // split_parts  # 向上取整
 
-        query_expanded = y_hats.unsqueeze(1)  # [B, 1, D]
-        distances = torch.norm(candidate_pool_tensor - query_expanded, dim=-1)
-        top_k_index = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [B, K]
+        for start in range(0, total, split_batch_size):
+            end = min(start + split_batch_size, total)
+            y_chunk = y_hats[start:end]
+            pos_ids_chunk = pos_item_ids[start:end]
+
+            candidate_embeddings = []
+            ground_true_index = []
+
+            for item_id in pos_ids_chunk:
+                c_id = dataset.metadata[item_id]['category_id']
+                pool = candidate_pools[c_id]
+                candidate_embeddings.append(pool['embeddings'])  # [Pool_size, D]
+                ground_true_index.append(pool['index'][item_id])
+
+            candidate_pool_tensor = torch.stack(candidate_embeddings, dim=0).to(self.local_rank)  # [B, Pool_size, D]
+            query_expanded = y_chunk.unsqueeze(1)  # [B, 1, D]
+            distances = torch.norm(candidate_pool_tensor - query_expanded, dim=-1)  # [B, Pool_size]
+            top_k_index = torch.topk(distances, k=max(top_k_list), largest=False).indices  # [B, K]
+
+            ground_true_tensor = torch.tensor(ground_true_index, dtype=torch.long,device=self.local_rank)
+
+            for k in top_k_list:
+                hits = (top_k_index[:, :k] == ground_true_tensor.unsqueeze(1)).any(dim=1).float().sum().item()
+                metrics[f"Recall@{k}"] += hits
 
         for k in top_k_list:
-            hits = (top_k_index[:, :k] == ground_true_index_tensor.unsqueeze(1)).any(dim=1).float().sum().item()
-            metrics[f"Recall@{k}"] = hits / y_hats.size(0)
-        return metrics
+            metrics[f"Recall@{k}"] /= total  # 平均化结果
 
+        return metrics
     def try_save_checkpoint(self, metrics: Dict[str, float], epoch: int):
+        if epoch<=150:
+            return
         for metric,metric_value in metrics.items():
             sign = 1 if metric=='loss' else -1
             best = self.best_metrics.get(metric, sign * np.inf)
             if metric_value * sign < best * sign:
                 self.best_metrics[metric] = metric_value
-                ckpt_name = f"{self.model.cfg.model_name}_best_{metric}"
+                ckpt_name = f"{self.model_cfg.model_name}_best_{metric}"
                 self.save_checkpoint(ckpt_name=ckpt_name,epoch=epoch)
                 self.log(
                     level='info',
@@ -213,11 +309,11 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         )
         if self.world_size > 1 and self.run_mode == 'test':
             raise ValueError("测试模式下不支持分布式")
-        ckpt_name_prefix = self.model.cfg.model_name
+        ckpt_name_prefix = self.model_cfg.model_name
         if self.run_mode == 'train-valid':
             ckpt_path = self.cfg.checkpoint_dir.parent / 'compatibility_prediction' / f'{ckpt_name_prefix}_best_AUC.pth'
         elif self.run_mode == 'test':
-            ckpt_path = self.cfg.checkpoint_dir / f'{ckpt_name_prefix}_best_loss.pth'
+            ckpt_path = self.cfg.checkpoint_dir / f'{ckpt_name_prefix}_best_Recall@10.pth'
         else:
             raise ValueError("未知的运行模式")
         self.load_checkpoint(ckpt_path=ckpt_path, only_load_model=True)
@@ -229,8 +325,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         )
 
     def load_model(self) -> nn.Module:
-        cfg = OutfitTransformerConfig()
-        return OutfitTransformer(cfg=cfg)
+        return OutfitTransformer(cfg=self.model_cfg)
 
     def load_optimizer(self) -> torch.optim.Optimizer:
         return torch.optim.AdamW(self.model.parameters(), lr=self.cfg.learning_rate)
@@ -251,7 +346,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         return torch.amp.GradScaler()
 
     def setup_train_and_valid_dataloader(self, sample_mode: Literal['easy','hard']='easy'):
-        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         self.setup_train_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
         self.setup_valid_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
@@ -273,6 +368,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
+            persistent_workers=True,
             collate_fn=PolyvoreComplementaryItemRetrievalDataset.train_collate_fn
         )
 
@@ -294,11 +390,12 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
+            persistent_workers=True,
             collate_fn=PolyvoreComplementaryItemRetrievalDataset.valid_collate_fn
         )
 
     def setup_test_dataloader(self):
-        prefix = f"{self.model.cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
+        prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         test_dataset = PolyvoreComplementaryItemRetrievalDataset(
             polyvore_type=self.cfg.polyvore_type,
