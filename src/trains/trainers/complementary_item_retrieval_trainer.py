@@ -4,7 +4,7 @@ from typing import cast, Literal, List, Dict
 
 import numpy as np
 import torch
-from torch import nn, autocast
+from torch import nn, autocast, dtype
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -177,7 +177,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 ).to(self.local_rank)
             )
             candidate_tensors.append(
-                torch.tensor(candidate_pools[c_id]['embeddings'],dtype=torch.float,device=self.local_rank)
+                candidate_pools[c_id]['embeddings'].clone().detach().to(self.local_rank)
             )
             gt_padded.append(
                 category_to_gt[c_id]+[-1]*(max_length-q_length)
