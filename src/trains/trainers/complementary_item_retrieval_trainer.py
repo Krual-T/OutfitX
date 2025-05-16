@@ -198,6 +198,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             hits = (mask_tensor.unsqueeze(-1)&(top_k_index[:, :, :k] == gt_index_tensor.unsqueeze(-1))).any(dim=-1).float()
             metric = f'Recall@{k}'
             metrics[metric] = hits.sum().item() / mask_tensor.sum().item()
+        return metrics
 
     # def compute_recall_metrics(
     #     self,
