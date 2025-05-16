@@ -187,7 +187,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         category_to_queries_tensor_padded = torch.stack(category_to_queries_padded,dim=0)
         candidate_tensors = torch.stack(candidate_tensors,dim=0)
         gt_index_tensor = torch.tensor(gt_padded,dtype=torch.long,device=self.local_rank) #  after padded [C, max_len]
-        mask_tensor = torch.tensor(mask,dtype=torch.bool,device=self.local_rank)
+        mask_tensor = torch.tensor(mask,dtype=torch.bool,device=self.local_rank) # [C, max_len]
 
         with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
             dists = torch.cdist(category_to_queries_tensor_padded, candidate_tensors)  # [C, max_len, 3000]
@@ -195,7 +195,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
 
         metrics = defaultdict(float)
         for k in top_k_list:
-            hits = (mask_tensor&(top_k_index[:, :, :k] == gt_index_tensor.unsqueeze(-1))).any(dim=-1).float()
+            hits = (mask_tensor.unsqueeze(-1)&(top_k_index[:, :, :k] == gt_index_tensor.unsqueeze(-1))).any(dim=-1).float()
             metric = f'Recall@{k}'
             metrics[metric] = hits.sum().item() / mask_tensor.sum().item()
 
