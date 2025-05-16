@@ -167,7 +167,7 @@ class DistributedTrainer(ABC):
     ):
         self.cfg = cfg
         self.run_mode = run_mode
-        self.local_rank = None
+        self.local_rank:Union[int,None] = None
         self.rank = None
         self.world_size = None
         self.logger = None
@@ -421,7 +421,6 @@ class DistributedTrainer(ABC):
             self.setup_custom_dataloader()
 
     def save_checkpoint(self, epoch, ckpt_name = None, model_cfg_dict:Optional[Dict[str,Any]] = None, *args, **kwargs):
-        ""
         """
         保存模型检查点，包括模型参数、优化器状态、学习率调节器状态、scaler状态。
         检查点文件名为 epoch_{epoch}.pth，保存在 cfg.checkpoint_dir 目录下。
@@ -430,6 +429,8 @@ class DistributedTrainer(ABC):
             2. 检查点文件会被保存到 cfg.checkpoint_dir 目录下，因此需要确保该目录存在。
             3. 如果使用rank==0调用，最好在if外调用dist.barrier()，以确保进程统一。
             4. 保存的检查点不是ddp模型，而是原始模型（没有module），可以直接被load_checkpoint加载。
+        :param model_cfg_dict:
+        :param ckpt_name:
         :param epoch:int
             当前训练轮数
         :return: checkpoint_path:str
