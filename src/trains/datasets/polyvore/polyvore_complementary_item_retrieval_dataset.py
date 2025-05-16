@@ -40,8 +40,8 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
         self.large_categories = self.__get_large_categories()
         self.cir_dataset = self.__load_split_dataset()
-        # self.negative_pool = self.__build_negative_pool()
-        # self.candidate_pools = self.__build_candidate_pool() if self.mode != 'train' else {}
+        self.negative_pool = self.__build_negative_pool()
+        self.candidate_pools = self.__build_candidate_pool() if self.mode != 'train' else {}
 
 
     def __len__(self):
