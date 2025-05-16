@@ -30,7 +30,7 @@ class PolyvoreItemDataset(Dataset):
 
     def load_metadata(self):
         metadata_path = self.dataset_dir / 'item_metadata.json'
-        with open(metadata_path) as f:
+        with open(metadata_path,mode='r',encoding='utf-8') as f:
             metadata_original = json.load(f)
         return {item['item_id']: item for item in metadata_original}
 
