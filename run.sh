@@ -25,11 +25,6 @@ git reset --hard origin/$BRANCH_NAME || {
     echo "❌ 分支不存在：origin/$BRANCH_NAME"
     exit 1
 }
-# ✅ 在 Git 操作之后再给自己加执行权限（防止被覆盖）
-if [ ! -x "$0" ]; then
-    chmod +x "$0"
-    echo "🛠️ 已自动重新赋予执行权限，下次可直接用 ./$(basename "$0")"
-fi
 # 🚀 启动训练任务
 echo "🚀 正在运行任务：$TASK_NAME，模式：$MODE"
 torchrun --standalone --nproc_per_node=1 ./src/trains/run/${TASK_NAME}.py --mode=${MODE}
