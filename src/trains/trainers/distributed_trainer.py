@@ -449,7 +449,7 @@ class DistributedTrainer(ABC):
         }, checkpoint_path)
         return checkpoint_path
 
-    def load_checkpoint(self, ckpt_path: str,only_load_model:bool = False, *args, **kwargs):
+    def load_checkpoint(self, ckpt_path: pathlib.Path, only_load_model:bool = False, *args, **kwargs):
         """
         加载模型检查点，包括模型参数、优化器状态、学习率调节器状态、scaler状态。
         注意：
