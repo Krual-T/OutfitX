@@ -392,14 +392,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         all_labels = torch.cat(all_labels, dim=0)
         all_loss = torch.stack(all_loss).mean()/batch_count
 
-        if batch_count > 1:
-            # 🔍 输出 label 分布情况
-            label_values = all_labels.int().cpu().numpy()
-            num_zeros = np.sum(label_values == 0)
-            num_ones = np.sum(label_values == 1)
-            total = len(label_values)
-            print(f"\n🌟 当前标签分布：0 -> {num_zeros} ({num_zeros / total:.2%}), 1 -> {num_ones} ({num_ones / total:.2%})")
-
         metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
         return {
             'loss': all_loss.item(),
@@ -427,15 +419,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-
-        # 🌟 输出概率分布，协助诊断
-        if torch.distributed.get_rank() == 0:
-            print("\n[🎯 预测概率区间统计]")
-            print(f"  <=0.2     : {(probs <= 0.2).sum().item()}")
-            print(f"  0.2~0.3   : {((probs > 0.2) & (probs <= 0.3)).sum().item()}")
-            print(f"  0.3~0.4   : {((probs > 0.3) & (probs <= 0.4)).sum().item()}")
-            print(f"  0.4~0.5   : {((probs > 0.4) & (probs <= 0.5)).sum().item()}")
-            print(f"  >0.5      : {(probs > 0.5).sum().item()}")
 
         # ✅ 返回最终结果（键名保持一致性）
         return {
