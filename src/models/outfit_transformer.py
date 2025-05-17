@@ -96,7 +96,7 @@ class OutfitTransformer(nn.Module):
         :return: item_embedding_list：np.ndarray（B,d_embed）
         """
         # (B,1)
-        items = [OutfitComplementaryItemRetrievalTask(outfit=[item]) for item in items]
+        items = [[item] for item in items]
         # (B,1,d_embed)
         embeddings,_ = self._get_embeddings_and_padding_masks(items)
         item_embedding_list = embeddings[:,0,:].cpu().detach().numpy()
@@ -107,9 +107,11 @@ class OutfitTransformer(nn.Module):
         cp_queries: List[OutfitCompatibilityPredictionTask],
         use_precomputed_embedding: bool = True
      )->torch.Tensor:
-        embeddings,mask = self._get_embeddings_and_padding_masks(cp_queries, use_precomputed_embedding)
+        queries = [query.outfit for query in cp_queries]
+        embeddings,mask = self._get_embeddings_and_padding_masks(queries, use_precomputed_embedding)
+        B, L, d_embed = embeddings.shape
         transformer_inputs = torch.cat([
-                self.outfit_token.view(1, 1, -1).expand(len(cp_queries), -1, -1), # (B,1,d_embed) d_embed=item_encoder.d_embed
+                self.outfit_token.view(1, 1, -1).expand(B, -1, -1), # (B,1,d_embed) d_embed=item_encoder.d_embed
                 embeddings # (B,L,d_embed)
              ],dim=1) # (B,1+L,d_embed)
         mask = torch.cat([
@@ -129,13 +131,22 @@ class OutfitTransformer(nn.Module):
         cir_queries: List[OutfitComplementaryItemRetrievalTask],
         use_precomputed_embedding: bool = True
     )->torch.Tensor:
-        for query in cir_queries:
-            query.target_item.image = self.image_pad
-            query.outfit=[query.target_item]+query.outfit
+        outfits = [query.outfit for query in cir_queries]
         # [B,1+L,d_embed]
-        embeddings,mask = self._get_embeddings_and_padding_masks(cir_queries, use_precomputed_embedding)
-        image_embedding_index=self.item_encoder.d_embed//2
-        embeddings[:,0,:image_embedding_index] = self.target_item_image_emb.view(1, -1)
+        embeddings,mask = self._get_embeddings_and_padding_masks(outfits, use_precomputed_embedding)
+        target_items_text_embedding = torch.tensor( # [B, d_embed//2]
+            [query.target_item.text_embedding for query in cir_queries],
+            dtype=torch.float32,
+            device=self.device
+        )
+        target_items_embedding = torch.cat(
+            [self.target_item_image_emb.view(1, -1),target_items_text_embedding],
+            dim=-1
+        )# [B, d_embed]
+        embeddings = torch.cat(
+            [target_items_embedding.unsqueeze(1), embeddings],# [B, 1, d_embed] + [B, L, d_embed] -> [B, 1+L, d_embed]
+            dim=1
+        )
         transformer_outputs = self.transformer_encoder(
             src=embeddings,
             src_key_padding_mask=mask
@@ -167,21 +178,16 @@ class OutfitTransformer(nn.Module):
         item_embeddings = self.cir_ffn(item_token_states) # [B, d_embed]
         return item_embeddings
 
-    def _get_embeddings_and_padding_masks(self,
-        queries:List[Union[
-            OutfitCompatibilityPredictionTask,
-            OutfitComplementaryItemRetrievalTask
-        ]],
+    def _get_embeddings_and_padding_masks(
+        self,
+        sequences: List[List[FashionItem]],
         use_precomputed_embedding: bool = False,
     ):
-        max_length = self._get_max_length(queries)
-        # batch_size = len(queries)
-
-        outfits = [query.outfit for query in queries]
+        max_length = self._get_max_length(sequences)
 
         if use_precomputed_embedding:
             embeddings = self._pad_sequences(
-                sequences=[[item.embedding for item in outfit] for outfit in outfits],
+                sequences=[[item.embedding for item in outfit] for outfit in sequences],
                 max_length=max_length,
                 pad_value=self.pad_emb,
                 return_tensor=True
@@ -189,12 +195,12 @@ class OutfitTransformer(nn.Module):
         else:
             # 对outfit进行填充
             images = self._pad_sequences(
-                sequences=[[item.image for item in outfit]for outfit in outfits],
+                sequences=[[item.image for item in outfit] for outfit in sequences],
                 max_length=max_length,
                 pad_value=self.image_pad
             )
             texts = self._pad_sequences(
-                sequences=[[f"{item.description}"for item in outfit]for outfit in outfits],
+                sequences=[[f"{item.category}"for item in outfit] for outfit in sequences],
                 max_length=max_length,
                 pad_value=self.text_pad
             )
@@ -205,7 +211,7 @@ class OutfitTransformer(nn.Module):
         mask = torch.tensor(
             data=[
                 [0] * item_length(outfit) + [1] * (pad_length(outfit))
-                for outfit in outfits
+                for outfit in sequences
             ],
             dtype=torch.bool,
             device=self.device
