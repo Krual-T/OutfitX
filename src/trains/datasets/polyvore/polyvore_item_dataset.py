@@ -61,7 +61,7 @@ class PolyvoreItemDataset(Dataset):
         category = self.categories[str(metadata_item['category_id'])]
         description = metadata_item['title'] if metadata_item['title'] else metadata_item['url_name']
         embedding = self.embedding_dict[item_id] if self.embedding_dict else None
-        text_embedding = embedding[len(embedding)//2:] if embedding else None
+        text_embedding = embedding[len(embedding)//2:] if embedding is not None else None
         image = None
         if self.load_image:
             image_path = self.dataset_dir / 'images' / f'{item_id}.jpg'
