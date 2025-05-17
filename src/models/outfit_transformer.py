@@ -219,6 +219,8 @@ class OutfitTransformer(nn.Module):
             dtype=torch.bool,
             device=self.device
         )
+        embeddings = embeddings.contiguous()
+        mask = mask.contiguous()
         return embeddings,mask
 
     def _get_max_length(self, sequences):
