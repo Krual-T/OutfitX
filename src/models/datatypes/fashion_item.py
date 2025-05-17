@@ -30,6 +30,10 @@ class FashionItem(BaseModel):
         default=None,
         description="Embedding of the item"
     )
+    text_embedding: Optional[np.ndarray] = Field(
+        default=None,
+        description="category embedding of the item"
+    )
 
     class Config:
         arbitrary_types_allowed = True

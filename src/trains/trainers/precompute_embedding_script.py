@@ -47,7 +47,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         os.makedirs(precomputed_embedding_dir, exist_ok=True)
         prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         save_path = precomputed_embedding_dir / f'{prefix}{self.rank}.pkl'
-        with open(save_path, 'wb') as f:
+        with open(save_path, 'wb',encoding='utf-8') as f:
             pickle.dump({'ids': all_ids, 'embeddings': all_embeddings}, f)
 
         self.log(f"[Rank {self.rank}] 预计算完成！共保存{len(all_ids)}个物品到 {save_path}")
