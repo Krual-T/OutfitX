@@ -279,6 +279,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             sampler=train_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
+            persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
         )
 
@@ -289,6 +290,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             sampler=valid_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
+            persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
         )
 
