@@ -58,7 +58,7 @@ class PolyvoreItemDataset(Dataset):
             }
         """
         metadata_item = self.metadata[item_id]
-        category = self.categories[metadata_item['category_id']]
+        category = self.categories[str(metadata_item['category_id'])]
         description = metadata_item['title'] if metadata_item['title'] else metadata_item['url_name']
         embedding = self.embedding_dict[item_id] if self.embedding_dict else None
         text_embedding = embedding[len(embedding//2):] if embedding else None
