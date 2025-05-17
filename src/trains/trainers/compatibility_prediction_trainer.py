@@ -72,26 +72,26 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     self.scheduler.step()
             if self.world_size > 1:
                 dist.barrier()
-            metrics = self.build_metrics(
-                    local_y_hats=y_hats.detach(),
-                    local_labels=labels.detach(),
-                    local_loss=original_loss,
-                    epoch=epoch,
-            )
-            metrics = {
-                'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
-                **metrics
-            }
-            metrics = {f'train/batch/{k}': v for k, v in metrics.items()}
-            metrics = {
-                'batch_step': epoch * len(self.train_dataloader) + step,
-                **metrics
-            }
-            self.log(
-                level='info',
-                msg=str(metrics),
-                metrics=metrics
-            )
+            # metrics = self.build_metrics(
+            #         local_y_hats=y_hats.detach(),
+            #         local_labels=labels.detach(),
+            #         local_loss=original_loss,
+            #         epoch=epoch,
+            # )
+            # metrics = {
+            #     'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
+            #     **metrics
+            # }
+            # metrics = {f'train/batch/{k}': v for k, v in metrics.items()}
+            # metrics = {
+            #     'batch_step': epoch * len(self.train_dataloader) + step,
+            #     **metrics
+            # }
+            # self.log(
+            #     level='info',
+            #     msg=str(metrics),
+            #     metrics=metrics
+            # )
 
             local_total_loss += original_loss
             local_y_hats.append(y_hats.detach())
@@ -141,22 +141,22 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     original_loss = loss.clone().detach()
             if self.world_size > 1:
                 dist.barrier()
-            metrics = self.build_metrics(
-                    local_y_hats=y_hats.detach(),
-                    local_labels=labels.detach(),
-                    local_loss=original_loss,
-                    epoch=epoch,
-            )
-            metrics = {f'valid/batch/{k}': v for k, v in metrics.items()}
-            metrics = {
-                'batch_step': epoch * len(self.valid_dataloader) + step,
-                **metrics
-            }
-            self.log(
-                level='info',
-                msg=str(metrics),
-                metrics=metrics
-            )
+            # metrics = self.build_metrics(
+            #         local_y_hats=y_hats.detach(),
+            #         local_labels=labels.detach(),
+            #         local_loss=original_loss,
+            #         epoch=epoch,
+            # )
+            # metrics = {f'valid/batch/{k}': v for k, v in metrics.items()}
+            # metrics = {
+            #     'batch_step': epoch * len(self.valid_dataloader) + step,
+            #     **metrics
+            # }
+            # self.log(
+            #     level='info',
+            #     msg=str(metrics),
+            #     metrics=metrics
+            # )
 
             local_total_loss += original_loss
             local_y_hats.append(y_hats.detach())
@@ -497,6 +497,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
     def maybe_save_best_models(self, metrics: dict, epoch: int):
         for metric,metric_value in metrics.items():
+            if metric !='AUC' and metric!='loss':
+                continue
             sign = 1 if metric=='loss' else -1
             best = self.best_metrics.get(metric, sign * np.inf)
             if metric_value * sign < best * sign:
