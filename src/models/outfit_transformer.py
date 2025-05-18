@@ -148,7 +148,6 @@ class OutfitTransformer(nn.Module):
         outfit_mask: torch.Tensor, # [B, L]
     )->torch.Tensor:
         B, L, d_embed = outfit_embedding.shape
-
         target_items_image_embedding =self.target_item_image_emb.unsqueeze(0).expand(B,-1) # [B, d_embed//2]
         target_items_embedding = torch.cat(
             [target_items_image_embedding,target_item_text_embedding],

@@ -58,10 +58,12 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 y_hats = self.model(**input_dict)
                 y = batch_dict['pos_item_embedding'].to(self.local_rank)
                 neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank)
+                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank)
                 loss = self.loss(
                     batch_y=y,
                     batch_y_hat=y_hats,
                     batch_negative_samples=neg_items_emb_tensors,
+                    batch_negative_mask=neg_items_mask
                 )
                 original_loss = loss.clone().detach()
                 loss = loss / self.cfg.accumulation_steps
@@ -115,11 +117,12 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 y_hats = self.model(**input_dict)
                 y = batch_dict['pos_item_embedding'].to(self.local_rank)
                 neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank)
-
+                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank)
                 loss = self.loss(
                     batch_y=y,
                     batch_y_hat=y_hats,
                     batch_negative_samples=neg_items_emb_tensors,
+                    batch_negative_mask=neg_items_mask
                 )
                 original_loss = loss.clone().detach()
             total_loss += original_loss

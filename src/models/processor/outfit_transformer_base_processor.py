@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Any
 
 import numpy as np
 import torch
@@ -16,13 +16,13 @@ class OutfitTransformerBaseProcessor:
         self.text_pad = ''
         self.pad_emb = torch.zeros(self.cfg.item_encoder.dim_per_modality*2)
 
-    def _get_embeddings_and_padding_masks(
+    def _to_tensor_and_padding(
         self,
-        sequences: List[List[FashionItem]]
+        sequences: List[List[Any]]
     ):
         max_length = self._get_max_length(sequences)
         embeddings = self._pad_sequences(
-            sequences=[[item.embedding for item in outfit] for outfit in sequences],
+            sequences=sequences,
             max_length=max_length,
             pad_value=self.pad_emb,
             return_tensor=True
@@ -31,8 +31,8 @@ class OutfitTransformerBaseProcessor:
         pad_length = lambda seq: max_length - item_length(seq)
         mask = torch.tensor(
             data=[
-                [0] * item_length(outfit) + [1] * (pad_length(outfit))
-                for outfit in sequences
+                [0] * item_length(sequence) + [1] * (pad_length(sequence))
+                for sequence in sequences
             ],
             dtype=torch.bool
         )
