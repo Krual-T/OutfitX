@@ -1,4 +1,5 @@
-from typing import Type, Optional
+from typing import Type, Optional, Literal
+from unittest import TestCase
 
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
@@ -15,7 +16,7 @@ from src.models.datatypes import (
 class OutfitTransformerProcessorFactory:
     Tasks = OutfitTransformer.Tasks
     @staticmethod
-    def get_processor(task:Type[Tasks],cfg: Optional[OutfitTransformerConfig]= None,*args,**kwargs):
+    def get_processor(task:Type[Tasks],cfg: Optional[OutfitTransformerConfig]= None, run_mode:Optional[Literal['train', 'valid', 'test']] = None, *args, **kwargs):
 
         if cfg is None:
             cfg = OutfitTransformerConfig()
@@ -24,10 +25,55 @@ class OutfitTransformerProcessorFactory:
             return OutfitTransformerCompatibilityPredictionTaskProcessor(cfg=cfg)
 
         elif task is OutfitComplementaryItemRetrievalTask:
-            return OutfitTransformerComplementaryItemRetrievalTaskProcessor(*args,cfg=cfg,**kwargs)
+            if run_mode is None:
+                raise ValueError("run_mode must be specified for OutfitComplementaryItemRetrievalTask")
+            return OutfitTransformerComplementaryItemRetrievalTaskProcessor(run_mode=run_mode,cfg=cfg)
 
         elif task is OutfitFillInTheBlankTask:
             return OutfitTransformerFillInTheBlankTaskProcessor(cfg=cfg)
 
         elif task is OutfitPrecomputeEmbeddingTask:
             return OutfitTransformerPrecomputeEmbeddingTaskProcessor(cfg=cfg)
+
+class ProcessorFactoryTest(TestCase):
+    """
+    passed 4
+    """
+    def test_pickle_cp_processor(self):
+        proc = OutfitTransformerProcessorFactory.get_processor(
+            task=OutfitCompatibilityPredictionTask,
+        )
+        import pickle
+
+        pickle.dumps(proc)  # 应该能正常序列化
+    def test_pickle_fitb_processor(self):
+        proc = OutfitTransformerProcessorFactory.get_processor(
+            task=OutfitFillInTheBlankTask,
+        )
+        import pickle
+        pickle.dumps(proc)  # 应该能正常序列化
+
+    def test_pickle_pe_processor(self):
+        proc = OutfitTransformerProcessorFactory.get_processor(
+            task=OutfitPrecomputeEmbeddingTask,
+        )
+        import pickle
+        pickle.dumps(proc)  # 应该能正常序列化
+
+    def test_pickle_cir_processor(self):
+        proc = OutfitTransformerProcessorFactory.get_processor(
+            task=OutfitComplementaryItemRetrievalTask,
+            run_mode='train',
+        )
+        import pickle
+        pickle.dumps(proc)  # 应该能正常序列化
+        proc = OutfitTransformerProcessorFactory.get_processor(
+            task=OutfitComplementaryItemRetrievalTask,
+            run_mode='valid',
+        )
+        pickle.dumps(proc)  # 应该能正常序列化
+        proc = OutfitTransformerProcessorFactory.get_processor(
+            task=OutfitComplementaryItemRetrievalTask,
+            run_mode='test',
+        )
+        pickle.dumps(proc)  # 应该能正常序列化
