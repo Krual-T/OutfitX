@@ -30,13 +30,17 @@ class FillInTheBlankTrainer(DistributedTrainer):
         test_dataloader_process = tqdm(self.test_dataloader, desc=f'[Test] Fill in the Blank')
         total = 0
         correct = 0
-        for step, (queries, candidate_item_embeddings,y_index) in enumerate(test_dataloader_process):
+        for step, batch_dict in enumerate(test_dataloader_process):
+            input_dict = {
+                k: (v if k == 'task' else v.to(self.local_rank))
+                for k, v in batch_dict['input_dict'].items()
+            }
             with autocast(device_type=self.device_type,enabled=self.cfg.use_amp):
-                y_hats_embedding = self.model(queries).unsqueeze(1) # [B,1,D]
-                candidate_item_embeddings = candidate_item_embeddings.to(self.local_rank)  # [B,4,D]
+                y_hats_embedding = self.model(**input_dict).unsqueeze(1) # [B,1,D]
+                candidate_item_embeddings = batch_dict['candidate_item_embedding'].to(self.local_rank)  # [B,4,D]
                 dists = torch.cdist(y_hats_embedding, candidate_item_embeddings, p=2).squeeze(1) # [B,1,4]->[B,4]
             y_hats_index = torch.argmin(dists, dim=-1)# [B]
-            y_index = y_index.to(self.local_rank)# [B]
+            y_index = batch_dict['answer_index'].to(self.local_rank)# [B]
             total += y_hats_index.size(0)
             correct += (y_hats_index == y_index).sum().item()
         metrics = {
