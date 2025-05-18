@@ -60,7 +60,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     k: (v if k == 'task' else v.to(self.local_rank))
                     for k, v in batch_dict['input_dict'].items()
                 }
-                assert 'task' in batch_dict['input_dict'], "❌ batch_dict['input_dict'] 里根本没 task！"
                 with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
                     y_hats = self.model(**input_dict).squeeze(dim=-1)
                     labels = batch_dict['label'].to(self.local_rank)
