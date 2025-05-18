@@ -56,13 +56,12 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         local_labels = []
         for step,batch_dict in enumerate(train_processor):
             with self.safe_process_context(epoch=epoch):
-                input_ids = {
-                    k:v.to(self.local_rank)
-                    for k,v in batch_dict['input_dict'].items()
-                    if k !='task'
+                input_dict = {
+                    k: (v if k == 'task' else v.to(self.local_rank))
+                    for k, v in batch_dict['input_dict'].items()
                 }
                 with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                    y_hats = self.model(**input_ids).squeeze(dim=-1)
+                    y_hats = self.model(**input_dict).squeeze(dim=-1)
                     labels = batch_dict['label'].to(self.local_rank)
                     loss = self.loss(y_hat=y_hats, y_true=labels)
                     original_loss = loss.clone().detach()
@@ -138,13 +137,12 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         local_labels = []
         for step,batch_dict in enumerate(valid_processor):
             with self.safe_process_context(epoch=epoch):
-                input_ids = {
-                    k:v.to(self.local_rank)
-                    for k,v in batch_dict['input_dict'].items()
-                    if k!='task'
+                input_dict = {
+                    k: (v if k == 'task' else v.to(self.local_rank))
+                    for k, v in batch_dict['input_dict'].items()
                 }
                 with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
-                    y_hats = self.model(**input_ids).squeeze(dim=-1)
+                    y_hats = self.model(**input_dict).squeeze(dim=-1)
                     labels = batch_dict['label'].to(self.local_rank)
                     loss = self.loss(y_hat=y_hats, y_true=labels)
                     original_loss = loss.clone().detach()
@@ -208,9 +206,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         all_labels = []
         for step, batch_dict in enumerate(test_processor):
             input_dict = {
-                k: v.to(self.local_rank)
+                k: (v if k == 'task' else v.to(self.local_rank))
                 for k, v in batch_dict['input_dict'].items()
-                if k != 'task'
             }
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
