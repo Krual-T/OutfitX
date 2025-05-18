@@ -231,7 +231,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         all_labels = torch.cat(all_labels, dim=0)
 
         metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
-        metrics = {f'test/all/{k}': v for k, v in metrics.items()}
+        metrics = {f'{k}/test': v for k, v in metrics.items()}
         self.log(
             level='info',
             msg=f"[Test] Compatibility --> Results:\n\n {str(metrics)} \n",
