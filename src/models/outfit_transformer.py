@@ -137,7 +137,7 @@ class OutfitTransformer(nn.Module):
         )
         # 取出outfit_token的输出
         outfit_token_states = transformer_outputs[:, 0, :] # [B, d_embed]
-        scores = self.cp_ffn(outfit_token_states)
+        scores = self.cp_ffn(outfit_token_states) # [B, 1]
         return scores
 
 
