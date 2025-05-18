@@ -1,3 +1,5 @@
+import torch
+
 from .outfit_transformer_base_processor import OutfitTransformerBaseProcessor
 from src.models.datatypes import OutfitCompatibilityPredictionTask
 
@@ -13,4 +15,8 @@ class OutfitTransformerCompatibilityPredictionTaskProcessor(OutfitTransformerBas
                 'outfit_embedding': outfit_embedding_batch,
                 'outfit_mask': outfits_mask_batch,
             }
-        return input_dict
+        batch_dict = {
+            'input_dict': input_dict,
+            'label': torch.tensor(labels_iter, dtype=torch.float)
+        }
+        return batch_dict
