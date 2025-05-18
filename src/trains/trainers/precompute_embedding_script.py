@@ -10,6 +10,8 @@ from tqdm import tqdm
 
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
+from src.models.datatypes import OutfitPrecomputeEmbeddingTask
+from src.models.processor import OutfitTransformerProcessorFactory
 from src.trains.configs import PrecomputeEmbeddingConfig
 from src.trains.trainers.distributed_trainer import DistributedTrainer
 from src.trains.datasets import PolyvoreItemDataset
@@ -54,19 +56,22 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
 
     def setup_custom_dataloader(self):
         item_dataset = PolyvoreItemDataset(self.cfg.dataset_dir, load_image=True)
-        sampler = torch.utils.data.distributed.DistributedSampler(
-            item_dataset,
-            num_replicas=self.world_size,
-            rank=self.rank,
-            shuffle=False  # 预计算不需要打乱顺序
+        # sampler = torch.utils.data.distributed.DistributedSampler(
+        #     item_dataset,
+        #     num_replicas=self.world_size,
+        #     rank=self.rank,
+        #     shuffle=False  # 预计算不需要打乱顺序
+        # )
+        pe_processor = OutfitTransformerProcessorFactory.get_processor(
+            cfg=self.model_cfg,
+            task=OutfitPrecomputeEmbeddingTask
         )
-        collate_fn = lambda batch: [item for item in batch]
         self.item_dataloader = DataLoader(
             dataset=item_dataset,
             batch_size=self.cfg.batch_size,
-            sampler=sampler,
+            #sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
-            collate_fn=collate_fn
+            collate_fn=pe_processor,
         )
 
     def load_model(self) -> nn.Module:

@@ -4,7 +4,7 @@ from unittest import TestCase
 
 from PIL import Image
 from torch.utils.data import Dataset
-from src.models.datatypes import FashionItem
+from src.models.datatypes import FashionItem, OutfitPrecomputeEmbeddingTask
 from src.project_settings.info import PROJECT_DIR
 
 
@@ -27,9 +27,9 @@ class PolyvoreItemDataset(Dataset):
     def __len__(self):
         return len(self.all_item_ids)
 
-    def __getitem__(self, idx) -> FashionItem:
+    def __getitem__(self, idx) -> OutfitPrecomputeEmbeddingTask:
         item_id = self.all_item_ids[idx]
-        return self.get_item(item_id)
+        return OutfitPrecomputeEmbeddingTask(fashion_item=self.get_item(item_id))
 
     def load_metadata(self):
         metadata_path = self.dataset_dir / 'item_metadata.json'

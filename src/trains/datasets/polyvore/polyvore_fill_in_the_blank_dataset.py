@@ -44,6 +44,11 @@ class PolyvoreFillInTheBlankDataset(PolyvoreItemDataset):
         return query, candidate_item_embeddings, answer_index
     @staticmethod
     def collate_fn(batch):
+        """
+        弃用，因为在processor中已经处理了
+        :param batch:
+        :return:
+        """
         queries_iter, candidate_item_embeddings_iter, batch_y_iter = zip(*batch)
         return (
             [query for query in queries_iter],
