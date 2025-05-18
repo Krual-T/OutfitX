@@ -1,5 +1,3 @@
-from typing import Literal
-
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -16,8 +14,9 @@ class SetWiseRankingLoss(nn.Module):
     def forward(
         self,
         batch_y: torch.Tensor,
-        batch_negative_samples: torch.Tensor,
         batch_y_hat: torch.Tensor,
+        batch_negative_samples: torch.Tensor,
+        batch_negative_mask: torch.Tensor
     ):
         query_emb = batch_y_hat
         pos_emb = batch_y
@@ -29,9 +28,12 @@ class SetWiseRankingLoss(nn.Module):
         neg_dists = torch.norm(query_emb.unsqueeze(1) - neg_embs, dim=2)  # shape: (B, K)
 
         # L_all：对所有负样本的平均 hinge loss
-        L_all = F.relu(pos_dist.unsqueeze(1) - neg_dists + self.margin).mean()
+        hinge = F.relu(pos_dist.unsqueeze(1) - neg_dists + self.margin)
+        hinge = hinge * batch_negative_mask.float()
+        L_all = hinge.sum() / batch_negative_mask.sum()
 
         # L_hard：只关注最“接近”的负样本
+        neg_dists = neg_dists.masked_fill(~batch_negative_mask, torch.inf)
         hardest_neg = neg_dists.min(dim=1).values
 
         L_hard = F.relu(pos_dist - hardest_neg + self.margin).mean()

@@ -40,5 +40,10 @@ class PolyvoreCompatibilityPredictionDataset(PolyvoreItemDataset):
         return query, label
     @staticmethod
     def collate_fn(batch):
+        """
+        弃用，因为在processor中已经处理了
+        :param batch:
+        :return:
+        """
         queries_iter, labels_iter = zip(*batch)
         return [query for query in queries_iter], [label for label in labels_iter]

@@ -1,3 +1,5 @@
 from .fashion_item import FashionItem
 from .outfit_cp_task import OutfitCompatibilityPredictionTask
 from .outfit_cir_task import OutfitComplementaryItemRetrievalTask
+from .outfit_fitb_task import OutfitFillInTheBlankTask
+from .outfit_pe_task import OutfitPrecomputeEmbeddingTask

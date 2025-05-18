@@ -10,6 +10,8 @@ from tqdm import tqdm
 
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
+from src.models.datatypes import OutfitPrecomputeEmbeddingTask
+from src.models.processor import OutfitTransformerProcessorFactory
 from src.trains.configs import PrecomputeEmbeddingConfig
 from src.trains.trainers.distributed_trainer import DistributedTrainer
 from src.trains.datasets import PolyvoreItemDataset
@@ -25,6 +27,10 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         self.cfg = cfg
         self.model_cfg = OutfitTransformerConfig()
         self.item_dataloader = None
+        self.processor = OutfitTransformerProcessorFactory.get_processor(
+            cfg=self.model_cfg,
+            task=OutfitPrecomputeEmbeddingTask
+        )
     @torch.no_grad()
     def custom_task(self, *args, **kwargs):
         self.model.eval()
@@ -33,15 +39,10 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         self.log(f"[Rank {self.rank}] 开始预计算所有物品的embedding，共{total_batches}个batch。")
 
         with torch.no_grad(), tqdm(total=total_batches, desc=f"Rank {self.rank} Precomputing", ncols=100) as pbar:
-            for batch_idx, batch in enumerate(self.item_dataloader):
-                embeddings = self.model.module.precompute_embeddings(batch)
-                all_ids.extend([item.item_id for item in batch])
+            for batch_idx, batch_dict in enumerate(self.item_dataloader):
+                embeddings = self.model(**batch_dict['input_dict'])
+                all_ids.extend(batch_dict['item_id'])
                 all_embeddings.append(embeddings)
-
-                pbar.update(1)  # 更新进度条
-                if batch_idx % 10 == 0:  # 每10个batch记录一次日志（可以调整）
-                    self.log(f"[Rank {self.rank}] 已处理 {batch_idx}/{total_batches} batches.")
-
         all_embeddings = np.concatenate(all_embeddings, axis=0)
         precomputed_embedding_dir = self.cfg.precomputed_embedding_dir
         os.makedirs(precomputed_embedding_dir, exist_ok=True)
@@ -54,19 +55,18 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
 
     def setup_custom_dataloader(self):
         item_dataset = PolyvoreItemDataset(self.cfg.dataset_dir, load_image=True)
-        sampler = torch.utils.data.distributed.DistributedSampler(
-            item_dataset,
-            num_replicas=self.world_size,
-            rank=self.rank,
-            shuffle=False  # 预计算不需要打乱顺序
-        )
-        collate_fn = lambda batch: [item for item in batch]
+        # sampler = torch.utils.data.distributed.DistributedSampler(
+        #     item_dataset,
+        #     num_replicas=self.world_size,
+        #     rank=self.rank,
+        #     shuffle=False  # 预计算不需要打乱顺序
+        # )
         self.item_dataloader = DataLoader(
             dataset=item_dataset,
             batch_size=self.cfg.batch_size,
-            sampler=sampler,
+            #sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
-            collate_fn=collate_fn
+            collate_fn=self.processor,
         )
 
     def load_model(self) -> nn.Module:
@@ -91,7 +91,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
     def setup_test_dataloader(self):
         pass
     def hook_after_setup(self):
-        self.model = cast(OutfitTransformer, self.model)
+        pass
 
 
 

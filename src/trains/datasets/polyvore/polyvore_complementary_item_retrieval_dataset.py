@@ -154,6 +154,11 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
 
     @staticmethod
     def train_collate_fn(batch):
+        """
+        弃用，因为在processor中已经处理了
+        :param batch:
+        :return:
+        """
         query_iter, neg_items_emb_iter = zip(*batch)
         queries = [query for query in query_iter]
         pos_item_embeddings = torch.stack([
@@ -177,6 +182,11 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
         return queries, pos_item_embeddings, neg_items_emb_tensors
     @staticmethod
     def valid_collate_fn(batch):
+        """
+        弃用，因为在processor中已经处理了
+        :param batch:
+        :return:
+        """
         query_iter, neg_items_emb_iter = zip(*batch)
         queries = [query for query in query_iter]
         pos_item_ = {
@@ -204,6 +214,11 @@ class PolyvoreComplementaryItemRetrievalDataset(PolyvoreItemDataset):
         return queries, pos_item_, neg_items_emb_tensors
     @staticmethod
     def test_collate_fn(batch):
+        """
+        弃用，因为在processor中已经处理了
+        :param batch:
+        :return:
+        """
         query_iter, _ = zip(*batch)
         queries = [query for query in query_iter]
         pos_item_ids = [query.target_item.item_id for query in queries]

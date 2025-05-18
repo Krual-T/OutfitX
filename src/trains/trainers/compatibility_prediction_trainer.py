@@ -15,6 +15,8 @@ from torch import distributed as dist
 from src.losses import FocalLoss
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
+from src.models.datatypes import OutfitCompatibilityPredictionTask
+from src.models.processor import OutfitTransformerProcessorFactory
 from src.trains.configs.compatibility_prediction_train_config import CompatibilityPredictionTrainConfig
 from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityPredictionDataset
@@ -30,6 +32,10 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         self.loss:Union[FocalLoss,None] = None
         self.device_type = None
         self.model_cfg = OutfitTransformerConfig()
+        self.processor = OutfitTransformerProcessorFactory.get_processor(
+            task=OutfitCompatibilityPredictionTask,
+            cfg=self.model_cfg
+        )
         self.best_metrics = {
             'AUC': 0.0,
             'Precision': 0.0,
@@ -48,16 +54,15 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
         local_y_hats = []
         local_labels = []
-        for step,(queries, labels) in enumerate(train_processor):
+        for step,batch_dict in enumerate(train_processor):
             with self.safe_process_context(epoch=epoch):
-                labels = torch.tensor(
-                    data=labels,
-                    dtype=torch.float32,
-                    device=self.local_rank
-                )
-
+                input_dict = {
+                    k: (v if k == 'task' else v.to(self.local_rank))
+                    for k, v in batch_dict['input_dict'].items()
+                }
                 with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                    y_hats = self.model(queries).squeeze(dim=-1)
+                    y_hats = self.model(**input_dict).squeeze(dim=-1)
+                    labels = batch_dict['label'].to(self.local_rank)
                     loss = self.loss(y_hat=y_hats, y_true=labels)
                     original_loss = loss.clone().detach()
                     loss = loss / self.cfg.accumulation_steps
@@ -110,35 +115,35 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             local_labels=local_labels,
             local_loss=local_total_loss,
             batch_count=len(self.train_dataloader),
-            epoch=epoch
+            epoch=epoch+1
         )
-        metrics = {f'train/epoch/{k}': v for k, v in metrics.items()}
+        metrics = {f'{k}/train/epoch': v for k, v in metrics.items()}
         metrics = {
-            'epoch':epoch,
+            'epoch':epoch+1,
             **metrics
         }
         self.log(
             level='info',
-            msg=f"Epoch {epoch}/{self.cfg.n_epochs} -->Train End \n {str(metrics)}",
+            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} -->Train End \n {str(metrics)}",
             metrics=metrics
         )
 
     @torch.no_grad()
     def valid_epoch(self, epoch: int):
         self.model.eval()
-        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
+        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
         local_y_hats = []
         local_labels = []
-        for step,(queries, labels) in enumerate(valid_processor):
+        for step,batch_dict in enumerate(valid_processor):
             with self.safe_process_context(epoch=epoch):
-                labels = torch.tensor(
-                    data=labels,
-                    dtype=torch.float32,
-                    device=self.local_rank
-                )
+                input_dict = {
+                    k: (v if k == 'task' else v.to(self.local_rank))
+                    for k, v in batch_dict['input_dict'].items()
+                }
                 with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
-                    y_hats = self.model(queries).squeeze(dim=-1)
+                    y_hats = self.model(**input_dict).squeeze(dim=-1)
+                    labels = batch_dict['label'].to(self.local_rank)
                     loss = self.loss(y_hat=y_hats, y_true=labels)
                     original_loss = loss.clone().detach()
             if self.world_size > 1:
@@ -178,14 +183,14 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
         self.maybe_save_best_models(metrics=metrics, epoch=epoch)
 
-        metrics = {f'valid/epoch/{k}': v for k, v in metrics.items()}
+        metrics = {f'{k}/valid/epoch': v for k, v in metrics.items()}
         metrics = {
-            'epoch':epoch,
+            'epoch':epoch+1,
             **metrics
         }
         self.log(
             level='info',
-            msg=f"Epoch {epoch}/{self.cfg.n_epochs} --> Valid End \n\n {str(metrics)} \n",
+            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} --> Valid End \n\n {str(metrics)} \n",
             metrics=metrics
         )
 
@@ -199,14 +204,14 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         test_processor = tqdm(self.test_dataloader, desc='[Test] Compatibility Prediction')
         all_y_hats = []
         all_labels = []
-        for step, (queries, labels) in enumerate(test_processor):
-            labels = torch.tensor(
-                data=labels,
-                dtype=torch.float32,
-                device=self.local_rank
-            )
+        for step, batch_dict in enumerate(test_processor):
+            input_dict = {
+                k: (v if k == 'task' else v.to(self.local_rank))
+                for k, v in batch_dict['input_dict'].items()
+            }
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                y_hats = self.model(queries).squeeze(dim=-1)
+                y_hats = self.model(**input_dict).squeeze(dim=-1)
+            labels = batch_dict['label']
             all_y_hats.append(y_hats.detach())
             all_labels.append(labels.detach())
             # metrics = self.compute_cp_metrics(y_hats=all_y_hats[-1], labels=all_labels[-1])
@@ -226,7 +231,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         all_labels = torch.cat(all_labels, dim=0)
 
         metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
-        metrics = {f'test/all/{k}': v for k, v in metrics.items()}
+        metrics = {f'{k}/test': v for k, v in metrics.items()}
         self.log(
             level='info',
             msg=f"[Test] Compatibility --> Results:\n\n {str(metrics)} \n",
@@ -273,7 +278,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             train_sampler = None
             valid_sampler = None
             shuffle_flag = True
-
         self.train_dataloader = DataLoader(
             dataset=train_dataset,
             batch_size=self.cfg.batch_size,
@@ -282,7 +286,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
-            collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
+            collate_fn=self.processor
         )
 
         self.valid_dataloader = DataLoader(
@@ -293,7 +297,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
-            collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
+            collate_fn=self.processor
         )
 
     def setup_test_dataloader(self):
@@ -311,7 +315,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             batch_size=self.cfg.batch_size,
             shuffle=False,
             num_workers=self.cfg.dataloader_workers,
-            collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
+            collate_fn=self.processor
         )
 
     def hook_after_setup(self):

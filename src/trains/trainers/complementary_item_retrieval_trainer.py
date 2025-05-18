@@ -14,6 +14,7 @@ from src.losses import SetWiseRankingLoss
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
 from src.models.datatypes import OutfitComplementaryItemRetrievalTask
+from src.models.processor import OutfitTransformerProcessorFactory
 from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_complementary_item_retrieval_dataset import \
     PolyvoreComplementaryItemRetrievalDataset
@@ -28,20 +29,41 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         self.device_type = None
         self.best_metrics = {}
         self.model_cfg = OutfitTransformerConfig()
+        if self.run_mode == 'train-valid':
+            self.train_processor = OutfitTransformerProcessorFactory.get_processor(
+                run_mode='train',
+                task=OutfitComplementaryItemRetrievalTask,
+            )
+            self.valid_processor = OutfitTransformerProcessorFactory.get_processor(
+                run_mode='valid',
+                task=OutfitComplementaryItemRetrievalTask,
+            )
+        elif self.run_mode == 'test':
+            self.test_processor = OutfitTransformerProcessorFactory.get_processor(
+                run_mode='test',
+                task=OutfitComplementaryItemRetrievalTask,
+            )
 
     def train_epoch(self, epoch):
         self.model.train()
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
-        for step,(queries, pos_item_embeddings, neg_items_emb_tensors) in enumerate(train_processor):
-            y = pos_item_embeddings
+        for step,batch_dict in enumerate(train_processor):
+            input_dict = {
+                k: (v if k == 'task' else v.to(self.local_rank))
+                for k, v in batch_dict['input_dict'].items()
+            }
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
-                y_hats = self.model(queries)
+                y_hats = self.model(**input_dict)
+                y = batch_dict['pos_item_embedding'].to(self.local_rank)
+                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank)
+                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank)
                 loss = self.loss(
-                    batch_y=y.to(self.local_rank),
-                    batch_y_hat=y_hats.to(self.local_rank),
-                    batch_negative_samples=neg_items_emb_tensors.to(self.local_rank),
+                    batch_y=y,
+                    batch_y_hat=y_hats,
+                    batch_negative_samples=neg_items_emb_tensors,
+                    batch_negative_mask=neg_items_mask
                 )
                 original_loss = loss.clone().detach()
                 loss = loss / self.cfg.accumulation_steps
@@ -86,14 +108,21 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         top_k_list = [1,5,10,15,30,50]
         all_y_hats = []
         all_pos_item_ids = []
-        for step,(queries,pos_item_,neg_items_emb_tensors) in enumerate(valid_processor):
-            y = pos_item_['embeddings']
+        for step,batch_dict in enumerate(valid_processor):
+            input_dict = {
+                k: (v if k == 'task' else v.to(self.local_rank))
+                for k, v in batch_dict['input_dict'].items()
+            }
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
-                y_hats = self.model(queries)
+                y_hats = self.model(**input_dict)
+                y = batch_dict['pos_item_embedding'].to(self.local_rank)
+                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank)
+                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank)
                 loss = self.loss(
-                    batch_y=y.to(self.local_rank),
-                    batch_y_hat=y_hats.to(self.local_rank),
-                    batch_negative_samples=neg_items_emb_tensors.to(self.local_rank),
+                    batch_y=y,
+                    batch_y_hat=y_hats,
+                    batch_negative_samples=neg_items_emb_tensors,
+                    batch_negative_mask=neg_items_mask
                 )
                 original_loss = loss.clone().detach()
             total_loss += original_loss
@@ -116,7 +145,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 metrics=metrics
             )
             all_y_hats.append(y_hats.clone().detach())
-            all_pos_item_ids.extend(pos_item_['ids'])
+            all_pos_item_ids.extend(batch_dict['pos_item_id'])
             valid_processor.set_postfix(**metrics)
 
         all_y_hats = torch.cat(all_y_hats,dim=0)
@@ -268,11 +297,15 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         top_k_list = [1, 5, 10, 15, 30, 50]
         all_y_hats = []
         all_pos_item_ids = []
-        for step, (queries, pos_item_ids) in enumerate(test_processor):
+        for step, batch_dict in enumerate(test_processor):
+            input_dict = {
+                k: (v if k == 'task' else v.to(self.local_rank))
+                for k, v in batch_dict['input_dict'].items()
+            }
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                y_hats = self.model(queries)
+                y_hats = self.model(**input_dict)
             all_y_hats.append(y_hats.clone().detach())
-            all_pos_item_ids.extend(pos_item_ids)
+            all_pos_item_ids.extend(batch_dict['pos_item_id'])
 
         all_y_hats = torch.cat(all_y_hats, dim=0)
         metrics = self.compute_recall_metrics(
@@ -358,7 +391,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             persistent_workers=True,
-            collate_fn=PolyvoreComplementaryItemRetrievalDataset.train_collate_fn
+            collate_fn=self.train_processor
         )
 
     def setup_valid_dataloader(self, negative_sample_mode: Literal['easy', 'hard'], item_embeddings=None):
@@ -380,7 +413,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             persistent_workers=True,
-            collate_fn=PolyvoreComplementaryItemRetrievalDataset.valid_collate_fn
+            collate_fn=self.valid_processor
         )
 
     def setup_test_dataloader(self):
@@ -401,7 +434,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
-            collate_fn=PolyvoreComplementaryItemRetrievalDataset.test_collate_fn
+            collate_fn=self.test_processor
         )
 
     def load_loss(self):
