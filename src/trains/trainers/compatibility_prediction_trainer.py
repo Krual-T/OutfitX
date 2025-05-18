@@ -1,4 +1,6 @@
 import pickle
+from math import ceil
+
 import numpy as np
 import torch
 
@@ -72,26 +74,26 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     self.scheduler.step()
             if self.world_size > 1:
                 dist.barrier()
-            metrics = self.build_metrics(
-                    local_y_hats=y_hats.detach(),
-                    local_labels=labels.detach(),
-                    local_loss=original_loss,
-                    epoch=epoch,
-            )
-            metrics = {
-                'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
-                **metrics
-            }
-            metrics = {f'train/batch/{k}': v for k, v in metrics.items()}
-            metrics = {
-                'batch_step': epoch * len(self.train_dataloader) + step,
-                **metrics
-            }
-            self.log(
-                level='info',
-                msg=str(metrics),
-                metrics=metrics
-            )
+            # metrics = self.build_metrics(
+            #         local_y_hats=y_hats.detach(),
+            #         local_labels=labels.detach(),
+            #         local_loss=original_loss,
+            #         epoch=epoch,
+            # )
+            # metrics = {
+            #     'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
+            #     **metrics
+            # }
+            # metrics = {f'train/batch/{k}': v for k, v in metrics.items()}
+            # metrics = {
+            #     'batch_step': epoch * len(self.train_dataloader) + step,
+            #     **metrics
+            # }
+            # self.log(
+            #     level='info',
+            #     msg=str(metrics),
+            #     metrics=metrics
+            # )
 
             local_total_loss += original_loss
             local_y_hats.append(y_hats.detach())
@@ -141,22 +143,22 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
                     original_loss = loss.clone().detach()
             if self.world_size > 1:
                 dist.barrier()
-            metrics = self.build_metrics(
-                    local_y_hats=y_hats.detach(),
-                    local_labels=labels.detach(),
-                    local_loss=original_loss,
-                    epoch=epoch,
-            )
-            metrics = {f'valid/batch/{k}': v for k, v in metrics.items()}
-            metrics = {
-                'batch_step': epoch * len(self.valid_dataloader) + step,
-                **metrics
-            }
-            self.log(
-                level='info',
-                msg=str(metrics),
-                metrics=metrics
-            )
+            # metrics = self.build_metrics(
+            #         local_y_hats=y_hats.detach(),
+            #         local_labels=labels.detach(),
+            #         local_loss=original_loss,
+            #         epoch=epoch,
+            # )
+            # metrics = {f'valid/batch/{k}': v for k, v in metrics.items()}
+            # metrics = {
+            #     'batch_step': epoch * len(self.valid_dataloader) + step,
+            #     **metrics
+            # }
+            # self.log(
+            #     level='info',
+            #     msg=str(metrics),
+            #     metrics=metrics
+            # )
 
             local_total_loss += original_loss
             local_y_hats.append(y_hats.detach())
@@ -279,6 +281,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             sampler=train_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
+            persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
         )
 
@@ -289,6 +292,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             sampler=valid_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
+            persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=PolyvoreCompatibilityPredictionDataset.collate_fn
         )
 
@@ -348,7 +352,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             optimizer=self.optimizer,
             max_lr=self.cfg.learning_rate,
             epochs=self.cfg.n_epochs,
-            steps_per_epoch=len(self.train_dataloader) // self.cfg.accumulation_steps,
+            steps_per_epoch=ceil(len(self.train_dataloader) / self.cfg.accumulation_steps),
             pct_start=0.3,
             anneal_strategy='cos',
             div_factor=25,
@@ -390,14 +394,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         all_labels = torch.cat(all_labels, dim=0)
         all_loss = torch.stack(all_loss).mean()/batch_count
 
-        if batch_count > 1:
-            # 🔍 输出 label 分布情况
-            label_values = all_labels.int().cpu().numpy()
-            num_zeros = np.sum(label_values == 0)
-            num_ones = np.sum(label_values == 1)
-            total = len(label_values)
-            print(f"\n🌟 当前标签分布：0 -> {num_zeros} ({num_zeros / total:.2%}), 1 -> {num_ones} ({num_ones / total:.2%})")
-
         metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
         return {
             'loss': all_loss.item(),
@@ -425,15 +421,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-
-        # 🌟 输出概率分布，协助诊断
-        if torch.distributed.get_rank() == 0:
-            print("\n[🎯 预测概率区间统计]")
-            print(f"  <=0.2     : {(probs <= 0.2).sum().item()}")
-            print(f"  0.2~0.3   : {((probs > 0.2) & (probs <= 0.3)).sum().item()}")
-            print(f"  0.3~0.4   : {((probs > 0.3) & (probs <= 0.4)).sum().item()}")
-            print(f"  0.4~0.5   : {((probs > 0.4) & (probs <= 0.5)).sum().item()}")
-            print(f"  >0.5      : {(probs > 0.5).sum().item()}")
 
         # ✅ 返回最终结果（键名保持一致性）
         return {
@@ -497,6 +484,8 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
     def maybe_save_best_models(self, metrics: dict, epoch: int):
         for metric,metric_value in metrics.items():
+            if metric !='AUC' and metric!='loss':
+                continue
             sign = 1 if metric=='loss' else -1
             best = self.best_metrics.get(metric, sign * np.inf)
             if metric_value * sign < best * sign:

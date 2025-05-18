@@ -1,5 +1,6 @@
 import pickle
 from collections import defaultdict
+from math import ceil
 from typing import cast, Literal, List, Dict
 
 import numpy as np
@@ -323,7 +324,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             optimizer=self.optimizer,
             max_lr=self.cfg.learning_rate,
             epochs=self.cfg.n_epochs,
-            steps_per_epoch=len(self.train_dataloader) // self.cfg.accumulation_steps,
+            steps_per_epoch=ceil(len(self.train_dataloader) / self.cfg.accumulation_steps),
             pct_start=0.3,
             anneal_strategy='cos',
             div_factor=25,
