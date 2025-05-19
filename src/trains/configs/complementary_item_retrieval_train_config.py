@@ -13,6 +13,7 @@ class ComplementaryItemRetrievalTrainConfig(BaseTrainConfig):
     load_image: bool = False
     learning_rate: float = 4e-5 # learning rate
     n_epochs: int = 400
+    switch_to_hard_n_epochs: int = 200
     accumulation_steps: int = 4
     margin: float = 2.0
 

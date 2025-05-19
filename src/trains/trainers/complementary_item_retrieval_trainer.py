@@ -55,7 +55,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             raise RuntimeError("需在 with 语句中使用 DistributedTrainer。")
         if self.run_mode == 'train-valid':
             for epoch in range(self.cfg.n_epochs):
-                if epoch == 200:
+                if epoch == self.cfg.switch_to_hard_n_epochs:
                     self.setup_train_and_valid_dataloader(sample_mode='hard')
                 self.train_epoch(epoch)
                 self.valid_epoch(epoch)
