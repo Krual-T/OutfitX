@@ -99,16 +99,16 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 self.optimizer.zero_grad()
                 self.scheduler.step()
             total_loss += original_loss
-            metrics = {
-                'batch_step': epoch * len(self.train_dataloader) + step,
-                'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
-                'loss/train/batch': original_loss.item()
-            }
-            self.log(
-                level='info',
-                msg=str(metrics),
-                metrics=metrics
-            )
+            # metrics = {
+            #     'batch_step': epoch * len(self.train_dataloader) + step,
+            #     'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
+            #     'loss/train/batch': original_loss.item()
+            # }
+            # self.log(
+            #     level='info',
+            #     msg=str(metrics),
+            #     metrics=metrics
+            # )
 
         metrics = {
             'epoch':epoch,
@@ -146,24 +146,24 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 )
                 original_loss = loss.clone().detach()
             total_loss += original_loss
-            metrics = {
-                'loss': original_loss.item(),
-                # **self.compute_recall_metrics(
-                #     top_k_list=top_k_list,
-                #     dataloader=self.valid_dataloader,
-                #     y_hats=y_hats,
-                #     pos_item_ids=pos_item_['ids']
-                # )
-            }
-            metrics = {
-                'batch_step': epoch * len(self.valid_dataloader) + step,
-                **{f'{k}/valid/batch':v for k,v in metrics.items()}
-            }
-            self.log(
-                level='info',
-                msg=str(metrics),
-                metrics=metrics
-            )
+            # metrics = {
+            #     'loss': original_loss.item(),
+            #     # **self.compute_recall_metrics(
+            #     #     top_k_list=top_k_list,
+            #     #     dataloader=self.valid_dataloader,
+            #     #     y_hats=y_hats,
+            #     #     pos_item_ids=pos_item_['ids']
+            #     # )
+            # }
+            # metrics = {
+            #     'batch_step': epoch * len(self.valid_dataloader) + step,
+            #     **{f'{k}/valid/batch':v for k,v in metrics.items()}
+            # }
+            # self.log(
+            #     level='info',
+            #     msg=str(metrics),
+            #     metrics=metrics
+            # )
             all_y_hats.append(y_hats.clone().detach())
             all_pos_item_ids.extend(batch_dict['pos_item_id'])
 
