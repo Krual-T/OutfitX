@@ -109,7 +109,6 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 msg=str(metrics),
                 metrics=metrics
             )
-            train_processor.set_postfix(**metrics)
 
         metrics = {
             'epoch':epoch,
