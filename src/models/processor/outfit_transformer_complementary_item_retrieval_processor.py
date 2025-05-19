@@ -95,7 +95,7 @@ class OutfitTransformerComplementaryItemRetrievalTaskProcessor(OutfitTransformer
 
     def _build_input_dict(self, queries):
         # input_dict
-        outfit_sequence = [query.outfit for query in queries]
+        outfit_sequence = [[item.embedding for item in query.outfit] for query in queries]
         outfit_embedding_batch, outfits_mask = self._to_tensor_and_padding(
             sequences=outfit_sequence
         )
