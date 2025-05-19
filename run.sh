@@ -17,14 +17,15 @@ BRANCH_NAME="tangshaokun/$DATE_STR"
 DATE_CN=$(date -d "$DATE_STR" +'%Y年%m月%d日')
 
 echo "📅 当前日期：$DATE_CN"
-echo "🌿 切换到远程分支：$BRANCH_NAME"
+echo "🌿 正在切换到远程分支：$BRANCH_NAME"
 
 # 🔧 Git 操作
 git fetch origin
 git reset --hard origin/$BRANCH_NAME || {
-    echo "❌ 分支不存在：origin/$BRANCH_NAME"
+    echo "❌ 切换风分支失败: origin/$BRANCH_NAME [分支不存在]"
     exit 1
 }
+echo "✅ 分支切换成功：$BRANCH_NAME"
 # 🚀 启动训练任务
 echo "🚀 正在运行任务：$TASK_NAME，模式：$MODE"
 torchrun --standalone --nproc_per_node=1 ./src/trains/run/${TASK_NAME}.py --mode=${MODE}
