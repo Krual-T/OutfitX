@@ -8,9 +8,9 @@ class OutfitTransformerFillInTheBlankTaskProcessor(OutfitTransformerBaseProcesso
 
     def __call__(self, batch):
         queries_iter, candidate_item_embeddings_iter, batch_y_iter = zip(*batch)
-        sequences = [query.outfit for query in queries_iter]
-        outfit_embedding_batch, outfit_mask_batch = self._get_embeddings_and_padding_masks(
-            sequences=sequences
+        outfit_sequence = [[item.embedding for item in query.outfit] for query in queries]
+        outfit_embedding_batch, outfit_mask_batch = self._to_tensor_and_padding(
+            sequences=outfit_sequence
         )
         input_dict = {
             'type': OutfitComplementaryItemRetrievalTask,
