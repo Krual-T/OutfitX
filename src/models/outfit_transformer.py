@@ -144,8 +144,8 @@ class OutfitTransformer(nn.Module):
     def _cir_forward(
         self,
         outfit_embedding: torch.Tensor, # [B, L, d_embed]
-        target_item_text_embedding: torch.Tensor, # [B, d_embed//2]
         outfit_mask: torch.Tensor, # [B, L]
+        target_item_text_embedding: torch.Tensor, # [B, d_embed//2]
     )->torch.Tensor:
         B, L, d_embed = outfit_embedding.shape
         target_items_image_embedding =self.target_item_image_emb.unsqueeze(0).expand(B,-1) # [B, d_embed//2]

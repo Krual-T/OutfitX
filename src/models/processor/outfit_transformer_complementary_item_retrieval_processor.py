@@ -108,7 +108,7 @@ class OutfitTransformerComplementaryItemRetrievalTaskProcessor(OutfitTransformer
 
         return {
             'task': OutfitComplementaryItemRetrievalTask,
-            'outfit': outfit_embedding_batch,
+            'outfit_embedding': outfit_embedding_batch,
             'outfit_mask': outfits_mask,
             'target_item_text_embedding':target_item_text_embedding_batch
         }
