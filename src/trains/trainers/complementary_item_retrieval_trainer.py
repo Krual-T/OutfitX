@@ -171,7 +171,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         metrics = {
             'loss': total_loss.item() / len(self.valid_dataloader),
         }
-        if epoch==0 or (epoch+1)%5 == 0 or epoch>=150:
+        if epoch%5 == 0 or epoch>=150:
             metrics.update(
                 self.compute_recall_metrics(
                     top_k_list=top_k_list,
