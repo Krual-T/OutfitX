@@ -22,11 +22,11 @@ class SetWiseRankingLoss(nn.Module):
         neg_dists = torch.norm(batch_y_hat.unsqueeze(1) - batch_negative_samples, dim=2)  # (B,K)
         # 有效值位置
         valid_mask = (~batch_negative_mask).float()                        # (B,K)
+        valid_count = valid_mask.sum().clamp(min=1) # 标量
 
         # —— L_all ——
         hinge = F.relu(pos_dist.unsqueeze(1) - neg_dists + self.margin)    # (B,K)
         hinge = hinge * valid_mask
-        valid_count = valid_mask.sum().clamp(min=1)                        # 标量
         L_all = hinge.sum() / valid_count
 
         # —— L_hard ——
