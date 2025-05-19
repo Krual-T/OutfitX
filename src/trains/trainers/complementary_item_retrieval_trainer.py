@@ -51,14 +51,14 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
         for step,batch_dict in enumerate(train_processor):
             input_dict = {
-                k: (v if k == 'task' else v.to(self.local_rank))
+                k: (v if k == 'task' else v.to(self.local_rank,non_blocking=True))
                 for k, v in batch_dict['input_dict'].items()
             }
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(**input_dict)
-                y = batch_dict['pos_item_embedding'].to(self.local_rank)
-                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank)
-                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank)
+                y = batch_dict['pos_item_embedding'].to(self.local_rank,non_blocking=True)
+                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank,non_blocking=True)
+                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank,non_blocking=True)
                 loss = self.loss(
                     batch_y=y,
                     batch_y_hat=y_hats,
@@ -81,7 +81,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             metrics = {
                 'batch_step': epoch * len(self.train_dataloader) + step,
                 'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
-                'train/batch/loss': original_loss.item()
+                'loss/train/batch': original_loss.item()
             }
             self.log(
                 level='info',
@@ -92,7 +92,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
 
         metrics = {
             'epoch':epoch,
-            'train/epoch/loss': total_loss.item() / len(self.train_dataloader),
+            'loss/train/epoch': total_loss.item() / len(self.train_dataloader),
         }
         self.log(
             level='info',
@@ -110,14 +110,14 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         all_pos_item_ids = []
         for step,batch_dict in enumerate(valid_processor):
             input_dict = {
-                k: (v if k == 'task' else v.to(self.local_rank))
+                k: (v if k == 'task' else v.to(self.local_rank,non_blocking=True))
                 for k, v in batch_dict['input_dict'].items()
             }
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(**input_dict)
-                y = batch_dict['pos_item_embedding'].to(self.local_rank)
-                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank)
-                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank)
+                y = batch_dict['pos_item_embedding'].to(self.local_rank,non_blocking=True)
+                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank,non_blocking=True)
+                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank,non_blocking=True)
                 loss = self.loss(
                     batch_y=y,
                     batch_y_hat=y_hats,
@@ -137,7 +137,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             }
             metrics = {
                 'batch_step': epoch * len(self.valid_dataloader) + step,
-                **{f'valid/batch/{k}':v for k,v in metrics.items()}
+                **{f'{k}/valid/batch':v for k,v in metrics.items()}
             }
             self.log(
                 level='info',
@@ -146,7 +146,6 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             )
             all_y_hats.append(y_hats.clone().detach())
             all_pos_item_ids.extend(batch_dict['pos_item_id'])
-            valid_processor.set_postfix(**metrics)
 
         all_y_hats = torch.cat(all_y_hats,dim=0)
         metrics = {
@@ -164,7 +163,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         self.try_save_checkpoint(metrics=metrics, epoch=epoch)
         metrics = {
             'epoch':epoch,
-            **{f'valid/epoch/{k}':v for k,v in metrics.items()}
+            **{f'{k}/valid/epoch':v for k,v in metrics.items()}
         }
         self.log(
             level='info',
@@ -315,7 +314,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 pos_item_ids=all_pos_item_ids
             )
         metrics = {
-            **{f'test/{k}': v for k, v in metrics.items()}
+            **{f'{k}/test': v for k, v in metrics.items()}
         }
         self.log(
             level='info',
