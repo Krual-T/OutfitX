@@ -1,8 +1,9 @@
+from dataclasses import dataclass
 from typing import Literal
 
 from src.trains.configs import BaseTrainConfig
 
-
+@dataclass
 class ComplementaryItemRetrievalTrainConfig(BaseTrainConfig):
     find_unused_parameters = True
     batch_size: int = 1024*3

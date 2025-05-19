@@ -24,9 +24,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
     def __init__(self, cfg:CIRTrainConfig= None,run_mode: Literal['train-valid', 'test', 'custom'] = 'train-valid'):
         if cfg is None:
             cfg = CIRTrainConfig()
-        print(cfg.n_epochs)
         super().__init__(cfg=cfg, run_mode=run_mode)
-        print(cfg.n_epochs)
         self.device_type = None
         self.best_metrics = {}
         self.model_cfg = OutfitTransformerConfig()
@@ -69,7 +67,6 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
     def train_epoch(self, epoch):
         self.model.train()
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
-        print(f"total: {self.cfg.n_epochs}")
         self.optimizer.zero_grad()
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
         for step,batch_dict in enumerate(train_processor):
