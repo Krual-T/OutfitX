@@ -1,8 +1,7 @@
-import numpy as np
 import torch
 from typing import Literal
 from .outfit_transformer_base_processor import OutfitTransformerBaseProcessor
-from src.models.datatypes import OutfitCompatibilityPredictionTask, OutfitComplementaryItemRetrievalTask
+from src.models.datatypes import OutfitComplementaryItemRetrievalTask
 
 
 class OutfitTransformerComplementaryItemRetrievalTaskProcessor(OutfitTransformerBaseProcessor):
@@ -108,7 +107,7 @@ class OutfitTransformerComplementaryItemRetrievalTaskProcessor(OutfitTransformer
         ]) # (B, d_embed)
 
         return {
-            'task': OutfitCompatibilityPredictionTask,
+            'task': OutfitComplementaryItemRetrievalTask,
             'outfit': outfit_embedding_batch,
             'outfit_mask': outfits_mask,
             'target_item_text_embedding':target_item_text_embedding_batch
