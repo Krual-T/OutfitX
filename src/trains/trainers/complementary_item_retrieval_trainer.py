@@ -24,7 +24,9 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
     def __init__(self, cfg:CIRTrainConfig= None,run_mode: Literal['train-valid', 'test', 'custom'] = 'train-valid'):
         if cfg is None:
             cfg = CIRTrainConfig()
+        print(cfg.n_epochs)
         super().__init__(cfg=cfg, run_mode=run_mode)
+        print(cfg.n_epochs)
         self.device_type = None
         self.best_metrics = {}
         self.model_cfg = OutfitTransformerConfig()
