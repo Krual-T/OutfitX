@@ -45,9 +45,27 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 task=OutfitComplementaryItemRetrievalTask,
             )
 
+    def run(self):
+        """
+        运行训练过程，根据 cfg.n_epochs 进行训练迭代。
+        每个 epoch 都会执行 running_epoch 方法，根据 run_mode 执行相应的训练/验证/测试任务/自定义任务。
+        :return:
+        """
+        if not self._entered:
+            raise RuntimeError("需在 with 语句中使用 DistributedTrainer。")
+        if self.run_mode == 'train-valid':
+            for epoch in range(self.cfg.n_epochs):
+                if epoch == 200:
+                    self.setup_train_and_valid_dataloader(sample_mode='hard')
+                self.train_epoch(epoch)
+                self.valid_epoch(epoch)
+        elif self.run_mode == 'test':
+            self.test()
+        elif self.run_mode == 'custom':
+            # 自定义任务
+            self.custom_task()
+
     def train_epoch(self, epoch):
-        if self.sample_mode == 'hard':
-            epoch+=200
         self.model.train()
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
@@ -105,8 +123,6 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
 
     @torch.no_grad()
     def valid_epoch(self, epoch):
-        if self.sample_mode == 'hard':
-            epoch+=200
         self.model.eval()
         valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)

@@ -12,7 +12,7 @@ class ComplementaryItemRetrievalTrainConfig(BaseTrainConfig):
     auto_save_checkpoint: bool = True
     load_image: bool = False
     learning_rate: float = 4e-5 # learning rate
-    n_epochs: int = 200
+    n_epochs: int = 400
     accumulation_steps: int = 4
     margin: float = 2.0
 
