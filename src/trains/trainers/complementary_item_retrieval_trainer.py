@@ -29,6 +29,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         self.device_type = None
         self.best_metrics = {}
         self.model_cfg = OutfitTransformerConfig()
+        self.sample_mode = None
         if self.run_mode == 'train-valid':
             self.train_processor = OutfitTransformerProcessorFactory.get_processor(
                 run_mode='train',
@@ -45,6 +46,8 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             )
 
     def train_epoch(self, epoch):
+        if self.sample_mode == 'hard':
+            epoch+=200
         self.model.train()
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
@@ -102,6 +105,8 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
 
     @torch.no_grad()
     def valid_epoch(self, epoch):
+        if self.sample_mode == 'hard':
+            epoch+=200
         self.model.eval()
         valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
@@ -367,6 +372,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         return torch.amp.GradScaler()
 
     def setup_train_and_valid_dataloader(self, sample_mode: Literal['easy','hard']='easy'):
+        self.sample_mode = sample_mode
         prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         self.setup_train_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)
