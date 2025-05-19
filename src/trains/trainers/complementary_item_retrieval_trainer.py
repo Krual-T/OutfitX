@@ -66,7 +66,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
 
     def train_epoch(self, epoch):
         self.model.train()
-        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
+        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
         for step,batch_dict in enumerate(train_processor):
@@ -110,7 +110,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             # )
 
         metrics = {
-            'epoch':epoch,
+            'epoch':epoch+1,
             'loss/train/epoch': total_loss.item() / len(self.train_dataloader),
         }
         self.log(
@@ -122,7 +122,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
     @torch.no_grad()
     def valid_epoch(self, epoch):
         self.model.eval()
-        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
+        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
         top_k_list = [1,5,10,15,30,50]
         all_y_hats = []
@@ -181,7 +181,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             )
         self.try_save_checkpoint(metrics=metrics, epoch=epoch)
         metrics = {
-            'epoch':epoch,
+            'epoch':epoch+1,
             **{f'{k}/valid/epoch':v for k,v in metrics.items()}
         }
         self.log(
