@@ -6,7 +6,6 @@ from typing import cast, Literal, List, Dict
 import numpy as np
 import torch
 from torch import nn, autocast, dtype
-from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -68,6 +67,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
     def train_epoch(self, epoch):
         self.model.train()
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
+        print(f"total: {self.cfg.n_epochs}")
         self.optimizer.zero_grad()
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
         for step,batch_dict in enumerate(train_processor):
