@@ -6,7 +6,6 @@ from typing import cast, Literal, List, Dict
 import numpy as np
 import torch
 from torch import nn, autocast, dtype
-from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -29,6 +28,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         self.device_type = None
         self.best_metrics = {}
         self.model_cfg = OutfitTransformerConfig()
+        self.sample_mode = None
         if self.run_mode == 'train-valid':
             self.train_processor = OutfitTransformerProcessorFactory.get_processor(
                 run_mode='train',
@@ -44,21 +44,41 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 task=OutfitComplementaryItemRetrievalTask,
             )
 
+    def run(self):
+        """
+        运行训练过程，根据 cfg.n_epochs 进行训练迭代。
+        每个 epoch 都会执行 running_epoch 方法，根据 run_mode 执行相应的训练/验证/测试任务/自定义任务。
+        :return:
+        """
+        if not self._entered:
+            raise RuntimeError("需在 with 语句中使用 DistributedTrainer。")
+        if self.run_mode == 'train-valid':
+            for epoch in range(self.cfg.n_epochs):
+                if epoch == self.cfg.switch_to_hard_n_epochs:
+                    self.setup_train_and_valid_dataloader(sample_mode='hard')
+                self.train_epoch(epoch)
+                self.valid_epoch(epoch)
+        elif self.run_mode == 'test':
+            self.test()
+        elif self.run_mode == 'custom':
+            # 自定义任务
+            self.custom_task()
+
     def train_epoch(self, epoch):
         self.model.train()
-        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
+        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         self.optimizer.zero_grad()
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
         for step,batch_dict in enumerate(train_processor):
             input_dict = {
-                k: (v if k == 'task' else v.to(self.local_rank))
+                k: (v if k == 'task' else v.to(self.local_rank,non_blocking=True))
                 for k, v in batch_dict['input_dict'].items()
             }
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(**input_dict)
-                y = batch_dict['pos_item_embedding'].to(self.local_rank)
-                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank)
-                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank)
+                y = batch_dict['pos_item_embedding'].to(self.local_rank,non_blocking=True)
+                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank,non_blocking=True)
+                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank,non_blocking=True)
                 loss = self.loss(
                     batch_y=y,
                     batch_y_hat=y_hats,
@@ -78,21 +98,20 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 self.optimizer.zero_grad()
                 self.scheduler.step()
             total_loss += original_loss
-            metrics = {
-                'batch_step': epoch * len(self.train_dataloader) + step,
-                'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
-                'train/batch/loss': original_loss.item()
-            }
-            self.log(
-                level='info',
-                msg=str(metrics),
-                metrics=metrics
-            )
-            train_processor.set_postfix(**metrics)
+            # metrics = {
+            #     'batch_step': epoch * len(self.train_dataloader) + step,
+            #     'learning_rate': self.scheduler.get_last_lr()[0] if self.scheduler else self.cfg.learning_rate,
+            #     'loss/train/batch': original_loss.item()
+            # }
+            # self.log(
+            #     level='info',
+            #     msg=str(metrics),
+            #     metrics=metrics
+            # )
 
         metrics = {
-            'epoch':epoch,
-            'train/epoch/loss': total_loss.item() / len(self.train_dataloader),
+            'epoch':epoch+1,
+            'loss/train/epoch': total_loss.item() / len(self.train_dataloader),
         }
         self.log(
             level='info',
@@ -103,21 +122,21 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
     @torch.no_grad()
     def valid_epoch(self, epoch):
         self.model.eval()
-        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
+        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
         total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float)
         top_k_list = [1,5,10,15,30,50]
         all_y_hats = []
         all_pos_item_ids = []
         for step,batch_dict in enumerate(valid_processor):
             input_dict = {
-                k: (v if k == 'task' else v.to(self.local_rank))
+                k: (v if k == 'task' else v.to(self.local_rank,non_blocking=True))
                 for k, v in batch_dict['input_dict'].items()
             }
             with autocast(enabled=self.cfg.use_amp,device_type=self.device_type):
                 y_hats = self.model(**input_dict)
-                y = batch_dict['pos_item_embedding'].to(self.local_rank)
-                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank)
-                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank)
+                y = batch_dict['pos_item_embedding'].to(self.local_rank,non_blocking=True)
+                neg_items_emb_tensors = batch_dict['neg_items_embedding'].to(self.local_rank,non_blocking=True)
+                neg_items_mask = batch_dict['neg_items_mask'].to(self.local_rank,non_blocking=True)
                 loss = self.loss(
                     batch_y=y,
                     batch_y_hat=y_hats,
@@ -126,33 +145,32 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 )
                 original_loss = loss.clone().detach()
             total_loss += original_loss
-            metrics = {
-                'loss': original_loss.item(),
-                # **self.compute_recall_metrics(
-                #     top_k_list=top_k_list,
-                #     dataloader=self.valid_dataloader,
-                #     y_hats=y_hats,
-                #     pos_item_ids=pos_item_['ids']
-                # )
-            }
-            metrics = {
-                'batch_step': epoch * len(self.valid_dataloader) + step,
-                **{f'valid/batch/{k}':v for k,v in metrics.items()}
-            }
-            self.log(
-                level='info',
-                msg=str(metrics),
-                metrics=metrics
-            )
+            # metrics = {
+            #     'loss': original_loss.item(),
+            #     # **self.compute_recall_metrics(
+            #     #     top_k_list=top_k_list,
+            #     #     dataloader=self.valid_dataloader,
+            #     #     y_hats=y_hats,
+            #     #     pos_item_ids=pos_item_['ids']
+            #     # )
+            # }
+            # metrics = {
+            #     'batch_step': epoch * len(self.valid_dataloader) + step,
+            #     **{f'{k}/valid/batch':v for k,v in metrics.items()}
+            # }
+            # self.log(
+            #     level='info',
+            #     msg=str(metrics),
+            #     metrics=metrics
+            # )
             all_y_hats.append(y_hats.clone().detach())
             all_pos_item_ids.extend(batch_dict['pos_item_id'])
-            valid_processor.set_postfix(**metrics)
 
         all_y_hats = torch.cat(all_y_hats,dim=0)
         metrics = {
             'loss': total_loss.item() / len(self.valid_dataloader),
         }
-        if epoch==0 or (epoch+1)%5 == 0 or epoch>=150:
+        if epoch%5 == 0 or epoch>=150:
             metrics.update(
                 self.compute_recall_metrics(
                     top_k_list=top_k_list,
@@ -163,8 +181,8 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
             )
         self.try_save_checkpoint(metrics=metrics, epoch=epoch)
         metrics = {
-            'epoch':epoch,
-            **{f'valid/epoch/{k}':v for k,v in metrics.items()}
+            'epoch':epoch+1,
+            **{f'{k}/valid/epoch':v for k,v in metrics.items()}
         }
         self.log(
             level='info',
@@ -315,7 +333,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
                 pos_item_ids=all_pos_item_ids
             )
         metrics = {
-            **{f'test/{k}': v for k, v in metrics.items()}
+            **{f'{k}/test': v for k, v in metrics.items()}
         }
         self.log(
             level='info',
@@ -368,6 +386,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         return torch.amp.GradScaler()
 
     def setup_train_and_valid_dataloader(self, sample_mode: Literal['easy','hard']='easy'):
+        self.sample_mode = sample_mode
         prefix = f"{self.model_cfg.model_name}_{PolyvoreItemDataset.embed_file_prefix}"
         item_embeddings = self.load_embeddings(embed_file_prefix=prefix)
         self.setup_train_dataloader(negative_sample_mode=sample_mode, item_embeddings=item_embeddings)

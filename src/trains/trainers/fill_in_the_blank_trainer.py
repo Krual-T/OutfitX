@@ -9,6 +9,8 @@ from tqdm import tqdm
 
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
+from src.models.datatypes import OutfitFillInTheBlankTask
+from src.models.processor import OutfitTransformerProcessorFactory
 from src.trains.configs.fill_in_the_blank_train_config import FillInTheBlankTrainConfig
 from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_fill_in_the_blank_dataset import PolyvoreFillInTheBlankDataset
@@ -23,6 +25,14 @@ class FillInTheBlankTrainer(DistributedTrainer):
         self.cfg = cast(FillInTheBlankTrainConfig, cfg)
         self.device_type = None
         self.model_cfg = OutfitTransformerConfig()
+        if self.run_mode == 'train-valid':
+            raise ValueError("为实现")
+        elif self.run_mode == 'test':
+            self.test_processor = OutfitTransformerProcessorFactory.get_processor(
+                task=OutfitFillInTheBlankTask,
+                cfg=self.model_cfg,
+            )
+
     @torch.no_grad()
     def test(self):
         self.model.eval()
@@ -44,7 +54,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
             total += y_hats_index.size(0)
             correct += (y_hats_index == y_index).sum().item()
         metrics = {
-            'Accuracy': float(correct / total)
+            'Accuracy/test': float(correct / total)
         }
         self.log(
             level='info',
@@ -120,7 +130,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
             sampler=sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
-            collate_fn=PolyvoreFillInTheBlankDataset.collate_fn
+            collate_fn=self.test_processor
         )
 
     def setup_custom_dataloader(self):

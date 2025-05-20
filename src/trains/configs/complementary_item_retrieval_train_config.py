@@ -1,8 +1,9 @@
+from dataclasses import dataclass
 from typing import Literal
 
 from src.trains.configs import BaseTrainConfig
 
-
+@dataclass
 class ComplementaryItemRetrievalTrainConfig(BaseTrainConfig):
     find_unused_parameters = True
     batch_size: int = 1024*3
@@ -12,7 +13,8 @@ class ComplementaryItemRetrievalTrainConfig(BaseTrainConfig):
     auto_save_checkpoint: bool = True
     load_image: bool = False
     learning_rate: float = 4e-5 # learning rate
-    n_epochs: int = 200
+    n_epochs: int = 300
+    switch_to_hard_n_epochs: int = 150
     accumulation_steps: int = 4
     margin: float = 2.0
 

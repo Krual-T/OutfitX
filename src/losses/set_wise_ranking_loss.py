@@ -18,24 +18,20 @@ class SetWiseRankingLoss(nn.Module):
         batch_negative_samples: torch.Tensor,
         batch_negative_mask: torch.Tensor
     ):
-        query_emb = batch_y_hat
-        pos_emb = batch_y
-        neg_embs = batch_negative_samples
-        # 正样本距离
-        pos_dist = F.pairwise_distance(query_emb, pos_emb)  # shape: (B,)
+        pos_dist  = F.pairwise_distance(batch_y_hat, batch_y)               # (B,)
+        neg_dists = torch.norm(batch_y_hat.unsqueeze(1) - batch_negative_samples, dim=2)  # (B,K)
+        # 有效值位置
+        valid_mask = (~batch_negative_mask).float()                        # (B,K)
+        valid_count = valid_mask.sum().clamp(min=1) # 标量
 
-        # 所有负样本距离
-        neg_dists = torch.norm(query_emb.unsqueeze(1) - neg_embs, dim=2)  # shape: (B, K)
+        # —— L_all ——
+        hinge = F.relu(pos_dist.unsqueeze(1) - neg_dists + self.margin)    # (B,K)
+        hinge = hinge * valid_mask
+        L_all = hinge.sum() / valid_count
 
-        # L_all：对所有负样本的平均 hinge loss
-        hinge = F.relu(pos_dist.unsqueeze(1) - neg_dists + self.margin)
-        hinge = hinge * batch_negative_mask.float()
-        L_all = hinge.sum() / batch_negative_mask.sum()
-
-        # L_hard：只关注最“接近”的负样本
-        neg_dists = neg_dists.masked_fill(~batch_negative_mask, torch.inf)
-        hardest_neg = neg_dists.min(dim=1).values
-
-        L_hard = F.relu(pos_dist - hardest_neg + self.margin).mean()
+        # —— L_hard ——
+        neg_dists = neg_dists.masked_fill(batch_negative_mask, torch.inf)  # pad→inf
+        hardest = neg_dists.min(dim=1).values                              # (B,)
+        L_hard = F.relu(pos_dist - hardest + self.margin).mean()
 
         return L_all + L_hard
