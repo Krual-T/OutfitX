@@ -17,4 +17,4 @@ def get_outfit_index(location_id:Optional[Union[str,int]]= '101071404')->int:
     return int(resp['daily'][0]['level'])
 
 if __name__ == '__main__':
-    print(get_outfit_index(101230609))
+    print(get_outfit_index(101230609)) # 云霄
