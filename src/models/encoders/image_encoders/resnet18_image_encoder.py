@@ -72,7 +72,7 @@ class Resnet18ImageEncoder(BaseImageEncoder):
         return image_size
     @property
     def d_embed(self) -> int:
-        return self.d_embed
+        return 64
 
     def _forward(
             self,
