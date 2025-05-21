@@ -5,7 +5,7 @@ from typing import cast, Literal, List, Dict
 
 import numpy as np
 import torch
-from torch import nn, autocast, dtype
+from torch import nn, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 

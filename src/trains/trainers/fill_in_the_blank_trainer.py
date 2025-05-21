@@ -1,5 +1,5 @@
 import pickle
-from typing import Optional, Literal, cast, Union
+from typing import Optional, Literal, cast
 
 import numpy as np
 import torch

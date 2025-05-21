@@ -1,6 +1,5 @@
 import os
 import pickle
-from typing import cast
 
 import numpy as np
 import torch
