@@ -15,8 +15,8 @@ from torch import distributed as dist
 from src.losses import FocalLoss
 from src.models import OutfitTransformer
 from src.models.configs import OutfitTransformerConfig
-from src.models.datatypes import OutfitCompatibilityPredictionTask
-from src.models.processor import OutfitTransformerProcessorFactory
+from src.models.processor.outfit_transformer.outfit_transformer_original_compatibility_prediction_task_processor import \
+    OutfitTransformerOriginalCompatibilityPredictionTaskProcessor
 from src.trains.configs.compatibility_prediction_train_config import CompatibilityPredictionTrainConfig
 from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityPredictionDataset
@@ -32,10 +32,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         self.loss:Union[FocalLoss,None] = None
         self.device_type = None
         self.model_cfg = OutfitTransformerConfig()
-        self.processor = OutfitTransformerProcessorFactory.get_processor(
-            task=OutfitCompatibilityPredictionTask,
-            cfg=self.model_cfg
-        )
+        self.processor = OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(self.model_cfg)
         self.best_metrics = {
             'AUC': 0.0,
             'Precision': 0.0,
