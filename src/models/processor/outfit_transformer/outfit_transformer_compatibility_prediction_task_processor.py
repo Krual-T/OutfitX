@@ -6,7 +6,7 @@ from src.models.datatypes import OutfitCompatibilityPredictionTask
 class OutfitTransformerCompatibilityPredictionTaskProcessor(OutfitTransformerBaseProcessor):
     def __call__(self, batch):
         queries_iter, labels_iter = zip(*batch)
-        sequences = [query.outfit for query in queries_iter]
+        sequences = [[item.embedding for item in query.outfit] for query in queries_iter]
         outfit_embedding_batch,outfits_mask_batch = self._to_tensor_and_padding(
             sequences=sequences
         )
