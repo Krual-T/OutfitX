@@ -10,10 +10,12 @@ class OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(OutfitTransf
         max_length = self._get_max_length(sequences=outfit_seq)
         image_sequences = self._pad_sequences(
             sequences=[[item.image for item in outfit] for outfit in outfit_seq],
-            pad_value = self.image_pad
+            pad_value = self.image_pad,
+            max_length=max_length
         )
         text_sequences = self._pad_sequences(
             sequences=[[item.text for item in outfit] for outfit in outfit_seq],
+            max_length=max_length,
             pad_value = self.text_pad
         )
         item_length = lambda seq: min(len(seq), max_length)
