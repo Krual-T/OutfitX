@@ -5,7 +5,7 @@ import torch
 from torch import autocast
 
 from src.models.encoders.base_encoders import BaseTextEncoder
-from src.models.utils.model_utils import freeze_model
+from src.utils.model_utils import freeze_model
 
 
 class SigLIPTextEncoder(BaseTextEncoder):

@@ -6,7 +6,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from typing import List, Union, Tuple
 from PIL import Image
-from src.models.utils.model_utils import flatten_seq_to_one_dim
+from src.utils.model_utils import flatten_seq_to_one_dim
 
 
 class BaseImageEncoder(nn.Module, ABC):
