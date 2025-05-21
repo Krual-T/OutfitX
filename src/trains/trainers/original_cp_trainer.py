@@ -22,7 +22,7 @@ from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityPredictionDataset
 from src.trains.trainers.distributed_trainer import DistributedTrainer
 
-class CompatibilityPredictionTrainer(DistributedTrainer):
+class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
 
     def __init__(self, cfg:Optional[CompatibilityPredictionTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']= 'train-valid'):
         if cfg is None:
