@@ -1,4 +1,7 @@
-def get_outfit_index(location_id = '101071404')->int:
+from typing import Optional
+
+
+def get_outfit_index(location_id:Optional[str]= '101071404')->int:
     import requests
     API_HOST = 'mn5u9uyg32.re.qweatherapi.com'
     API_KEY = '1ec509cb419a44c38b99727694fe0532'
