@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from PIL import Image
 from torch import nn
+from torchvision.transforms.v2.functional import pad_video
 
 from src.models.configs import OutfitTransformerConfig
 from src.models.datatypes import FashionItem
@@ -18,13 +19,14 @@ class OutfitTransformerBaseProcessor:
 
     def _to_tensor_and_padding(
         self,
-        sequences: List[List[Any]]
+        sequences: List[List[Any]],
+        pad_value: Any = None
     ):
         max_length = self._get_max_length(sequences)
         embeddings = self._pad_sequences(
             sequences=sequences,
             max_length=max_length,
-            pad_value=self.pad_emb,
+            pad_value=self.pad_emb if pad_value is None else pad_value,
             return_tensor=True
         )
         item_length = lambda seq: min(len(seq), max_length)
@@ -52,9 +54,10 @@ class OutfitTransformerBaseProcessor:
 
         return min(self.cfg.max_length, max_length) if self.cfg.truncation else max_length
 
-    def _pad_sequences(self, sequences, pad_value, max_length,return_tensor=False):
+    def _pad_sequences(self, sequences,  max_length,pad_value = None,return_tensor=False):
         # if self.cfg.truncation OR self.cfg.padding == 'max_length'：
         # len(seq)可能大于max_length，需要对序列进行截断
+        pad_value = self.pad_emb if pad_value is None else pad_value
         item_length = lambda seq: min(len(seq), max_length)
         pad_length = lambda seq: max_length - item_length(seq)
         if return_tensor:

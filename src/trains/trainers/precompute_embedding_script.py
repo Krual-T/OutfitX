@@ -39,7 +39,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
 
         with torch.no_grad(), tqdm(self.item_dataloader, total=total_batches, desc=f"Rank {self.rank} Precomputing", ncols=100) as pbar:
             for batch_idx, batch_dict in enumerate(pbar):
-                embeddings = self.model(**batch_dict['input_dict'])
+                embeddings = self.model(**batch_dict['input_dict']).cpu().detach().numpy() # (B,d_embed)
                 all_ids.extend(batch_dict['item_id'])
                 all_embeddings.append(embeddings)
         all_embeddings = np.concatenate(all_embeddings, axis=0)

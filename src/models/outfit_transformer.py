@@ -114,7 +114,7 @@ class OutfitTransformer(nn.Module):
         """
         # (B,1,d_embed)
         embeddings = self.item_encoder(images,texts)
-        item_embedding_list = embeddings[:,0,:].cpu().detach().numpy() # (B,d_embed)
+        item_embedding_list = embeddings[:,0,:]
         return item_embedding_list
 
     def _cp_forward(
