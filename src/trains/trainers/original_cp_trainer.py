@@ -69,12 +69,12 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                     }
                     y_hats = self.model(**input_dict).squeeze(dim=-1)
                     labels = batch_dict['label'].to(self.local_rank)
-                    with torch.autograd.detect_anomaly():
-                        loss = self.loss(y_hat=y_hats, y_true=labels)
-                        original_loss = loss.clone().detach()
-                        loss = loss / self.cfg.accumulation_steps
+                    loss = self.loss(y_hat=y_hats, y_true=labels)
+                    original_loss = loss.clone().detach()
+                    loss = loss / self.cfg.accumulation_steps
 
-                self.scaler.scale(loss).backward()
+                with torch.autograd.detect_anomaly():
+                    self.scaler.scale(loss).backward()
                 update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step+1) == len(self.train_dataloader))
                 if update_grad:
                     self.scaler.unscale_(self.optimizer)
