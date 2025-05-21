@@ -3,9 +3,6 @@ from math import ceil
 
 import numpy as np
 import torch
-
-torch.autograd.set_detect_anomaly(True)
-
 from sklearn.metrics import roc_auc_score
 from torch import nn
 from typing import Optional, Literal, cast, Union
@@ -30,6 +27,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         if cfg is None:
             cfg = CompatibilityPredictionTrainConfig(
                 batch_size=128,
+                broadcast_buffers=False,
             )
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.cfg = cast(CompatibilityPredictionTrainConfig, cfg)
@@ -73,8 +71,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                     original_loss = loss.clone().detach()
                     loss = loss / self.cfg.accumulation_steps
 
-                with torch.autograd.detect_anomaly():
-                    self.scaler.scale(loss).backward()
+                self.scaler.scale(loss).backward()
                 update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step+1) == len(self.train_dataloader))
                 if update_grad:
                     self.scaler.unscale_(self.optimizer)

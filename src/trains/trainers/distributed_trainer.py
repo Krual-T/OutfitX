@@ -316,7 +316,8 @@ class DistributedTrainer(ABC):
                 self.model: DDP = DDP(
                     module=model,
                     find_unused_parameters=self.cfg.find_unused_parameters,
-                    device_ids=[self.local_rank]
+                    device_ids=[self.local_rank],
+                    broadcast_buffers=self.cfg.broadcast_buffers
                 )
             else:
                 self.model: DDP = DDP(

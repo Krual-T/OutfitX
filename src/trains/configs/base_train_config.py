@@ -28,7 +28,8 @@ class BaseTrainConfig(ABC):
     learning_rate: float = 2e-5
     checkpoint: str = None
     accumulation_steps: int = 1
-    seed: int = 42
+    seed: int = 42,
+    broadcast_buffers: bool = True
     @property
     @abstractmethod
     def find_unused_parameters(self)->bool:
