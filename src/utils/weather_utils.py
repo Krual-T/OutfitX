@@ -1,7 +1,7 @@
-from typing import Optional
+from typing import Optional, Union
 
 
-def get_outfit_index(location_id:Optional[str]= '101071404')->int:
+def get_outfit_index(location_id:Optional[Union[str,int]]= '101071404')->int:
     import requests
     API_HOST = 'mn5u9uyg32.re.qweatherapi.com'
     API_KEY = '1ec509cb419a44c38b99727694fe0532'
@@ -15,3 +15,6 @@ def get_outfit_index(location_id:Optional[str]= '101071404')->int:
     request_url = f'https://{API_HOST}{weather_index_api}/?{param_to_str(param_dict)}'
     resp = requests.get(request_url).json()
     return int(resp['daily'][0]['level'])
+
+if __name__ == '__main__':
+    print(get_outfit_index(101230609))
