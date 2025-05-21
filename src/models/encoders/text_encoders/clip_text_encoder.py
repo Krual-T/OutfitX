@@ -5,7 +5,7 @@ from transformers import CLIPTokenizer, CLIPTextModelWithProjection
 from typing import List
 from typing import Dict, Any
 from src.models.encoders.base_encoders import BaseTextEncoder
-from src.models.utils.model_utils import freeze_model
+from src.utils.model_utils import freeze_model
 
 
 class CLIPTextEncoder(BaseTextEncoder):

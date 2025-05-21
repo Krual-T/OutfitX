@@ -8,6 +8,7 @@ class OutfitTransformerPrecomputeEmbeddingTaskProcessor(OutfitTransformerBasePro
     def __call__(self, batch:List[OutfitPrecomputeEmbeddingTask]):
         batch_dict = {
             'input_dict': {
+                'task': OutfitPrecomputeEmbeddingTask,
                 'images': [[task.fashion_item.image] for task in batch],
                 'texts': [[task.fashion_item.category] for task in batch]
             },

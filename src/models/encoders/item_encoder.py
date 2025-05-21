@@ -3,7 +3,7 @@ from torch import nn
 from .image_encoders import Resnet18ImageEncoder, CLIPImageEncoder, SigLIPImageEncoder
 from .text_encoders import CLIPTextEncoder, HuggingFaceTextEncoder, SigLIPTextEncoder
 
-from src.models.utils.model_utils import aggregate_embeddings, freeze_model
+from src.utils.model_utils import aggregate_embeddings, freeze_model
 from src.models.configs import ItemEncoderConfig
 class ItemEncoder(nn.Module):
     def __init__(self,cfg: ItemEncoderConfig):

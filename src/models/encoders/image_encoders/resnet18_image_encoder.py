@@ -8,7 +8,7 @@ from PIL import Image
 from torchvision.models import resnet18, ResNet18_Weights
 from torchvision import transforms
 from src.models.encoders.base_encoders import BaseImageEncoder
-from src.models.utils.model_utils import freeze_model, flatten_seq_to_one_dim
+from src.utils.model_utils import freeze_model
 
 
 class Resnet18ImageEncoder(BaseImageEncoder):
@@ -23,7 +23,7 @@ class Resnet18ImageEncoder(BaseImageEncoder):
         super().__init__()
 
         # Load pre-trained ResNet-18 and adjust the final layer to match d_embed
-        self.d_embed = d_embed
+        self._d_embed = d_embed
         self.size = size
         self.crop_size = crop_size
         self.freeze = freeze
@@ -72,20 +72,22 @@ class Resnet18ImageEncoder(BaseImageEncoder):
         return image_size
     @property
     def d_embed(self) -> int:
-        return self.d_embed
+        return self._d_embed
 
     def _forward(
-            self,
-            images: List[Union[np.ndarray, Image.Image]]
+        self,
+        images: Union[List[Union[np.ndarray, Image.Image]], torch.Tensor],
     ):
-        transformed_images = torch.stack(
-            [
-                self.transform(
-                    Image.fromarray(image) if isinstance(image, np.ndarray) else image
-                ) for image in images
-            ]
-        ).to(self.device)
-
+        if not isinstance(images, torch.Tensor):
+            transformed_images = torch.stack(
+                [
+                    self.transform(
+                        Image.fromarray(image) if isinstance(image, np.ndarray) else image
+                    ) for image in images
+                ]
+            ).to(self.device)
+        else:
+            transformed_images = images.to(self.device)
         image_embeddings = self.model(
             transformed_images
         )

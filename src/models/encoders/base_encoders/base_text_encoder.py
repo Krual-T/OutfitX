@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from abc import ABC, abstractmethod
-from typing import List
-from src.models.utils.model_utils import flatten_seq_to_one_dim
+from typing import List, Union
+from src.utils.model_utils import flatten_seq_to_one_dim
 
 
 class BaseTextEncoder(nn.Module, ABC):
@@ -13,15 +13,20 @@ class BaseTextEncoder(nn.Module, ABC):
 
     def forward(
             self,
-            texts: List[List[str]],
+            texts: Union[List[List[str]],dict],
             normalize: bool = True,
             *args, **kwargs
     ) -> torch.Tensor:
-        if not self.__is_sequence_elements_length_consistent(texts):
-            raise ValueError('All sequences in texts should have the same length.')
+        if isinstance(texts, dict):
+            batch_size = texts['input_ids'].size(0)
+            text_length = texts['input_ids'].size(1)
+            texts = {k: v.view(batch_size * text_length, *v.size()[2:]) for k, v in texts.items()}
+        else:
+            if not self.__is_sequence_elements_length_consistent(texts):
+                raise ValueError('All sequences in texts should have the same length.')
 
-        batch_size = len(texts)
-        texts = flatten_seq_to_one_dim(texts)
+            batch_size = len(texts)
+            texts = flatten_seq_to_one_dim(texts)
 
         text_embeddings = self._forward(texts, *args, **kwargs)
 
@@ -37,7 +42,7 @@ class BaseTextEncoder(nn.Module, ABC):
     @abstractmethod
     def _forward(
             self,
-            texts: List[str]
+            texts: Union[List[str], dict],
     ) -> torch.Tensor:
         raise NotImplementedError(f"内部方法 '_forward' 必须在子类中实现")
 

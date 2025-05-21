@@ -7,7 +7,7 @@ from PIL import Image
 from torch import autocast
 
 from src.models.encoders.base_encoders import BaseImageEncoder
-from src.models.utils.model_utils import freeze_model
+
 
 class SigLIPImageEncoder(BaseImageEncoder):
     def __init__(
