@@ -40,19 +40,18 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
             tokenizer_kargs: Dict[str, Any] = None
     ) -> Tensor:
 
-
-        tokenizer_kargs = tokenizer_kargs if tokenizer_kargs is not None else {
-            'max_length': 32,
-            'padding': 'max_length',
-            'truncation': True,
-        }
-
-        tokenizer_kargs['return_tensors'] = 'pt'
         if isinstance(texts[0], str):
+            tokenizer_kargs = tokenizer_kargs if tokenizer_kargs is not None else {
+                'max_length': 32,
+                'padding': 'max_length',
+                'truncation': True,
+            }
+
+            tokenizer_kargs['return_tensors'] = 'pt'
             inputs = self.tokenizer(
                 texts, **tokenizer_kargs
             )
-        elif isinstance(texts[0], dict) and 'input_ids' in texts and 'attention_mask' in texts:
+        elif isinstance(texts, dict) and 'input_ids' in texts and 'attention_mask' in texts:
             inputs = texts
         else:
             raise ValueError("Invalid input format")

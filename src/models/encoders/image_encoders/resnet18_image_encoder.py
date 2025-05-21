@@ -76,9 +76,9 @@ class Resnet18ImageEncoder(BaseImageEncoder):
 
     def _forward(
         self,
-        images: List[Union[np.ndarray, Image.Image, torch.Tensor]],
+        images: Union[List[Union[np.ndarray, Image.Image]], torch.Tensor],
     ):
-        if not isinstance(images[0], torch.Tensor):
+        if not isinstance(images, torch.Tensor):
             transformed_images = torch.stack(
                 [
                     self.transform(

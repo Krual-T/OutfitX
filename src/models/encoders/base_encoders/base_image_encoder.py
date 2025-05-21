@@ -16,17 +16,22 @@ class BaseImageEncoder(nn.Module, ABC):
 
     def forward(
             self,
-            images: List[Union[List[np.ndarray],List[Image.Image]]],
+            images: Union[List[Union[List[np.ndarray],List[Image.Image]]],torch.Tensor],
             normalize: bool = True,
             *args, **kwargs
     ) -> torch.Tensor:
-        if not self.__is_sequence_elements_length_consistent(images):
-            raise ValueError('All sequences in images should have the same length.')
+        if isinstance(images, torch.Tensor):
+            batch_size = images.size(0)
+            outfit_length = images.size(1)
+            images = images.view(batch_size * outfit_length, *images.size()[2:])
+        else:
+            if not self.__is_sequence_elements_length_consistent(images):
+                raise ValueError('All sequences in images should have the same length.')
 
-        # 获取batch大小
-        batch_size = len(images)
-        # 将图像列表展平
-        images = flatten_seq_to_one_dim(images)
+            # 获取batch大小
+            batch_size = len(images)
+            # 将图像列表展平
+            images = flatten_seq_to_one_dim(images)
 
         # if len(images)>0 and isinstance(images[0], Image.Image):
         #     images = [np.array(image) for image in images]
@@ -46,7 +51,7 @@ class BaseImageEncoder(nn.Module, ABC):
     @abstractmethod
     def _forward(
             self,
-            images: List[Union[np.ndarray, Image.Image]]
+            images: Union[List[Union[np.ndarray, Image.Image]], torch.Tensor]
     ) -> torch.Tensor:
         raise NotImplementedError('这个_forward（image_embed）方法必须由子类来实现')
 
