@@ -4,6 +4,8 @@ from math import ceil
 import numpy as np
 import torch
 
+torch.autograd.set_detect_anomaly(True)
+
 from sklearn.metrics import roc_auc_score
 from torch import nn
 from typing import Optional, Literal, cast, Union
@@ -45,7 +47,6 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         }
 
     def train_epoch(self, epoch: int) -> None:
-        torch.autograd.set_detect_anomaly(True)
         self.model.train()
 
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
@@ -68,9 +69,10 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                     }
                     y_hats = self.model(**input_dict).squeeze(dim=-1)
                     labels = batch_dict['label'].to(self.local_rank)
-                    loss = self.loss(y_hat=y_hats, y_true=labels)
-                    original_loss = loss.clone().detach()
-                    loss = loss / self.cfg.accumulation_steps
+                    with torch.autograd.detect_anomaly():
+                        loss = self.loss(y_hat=y_hats, y_true=labels)
+                        original_loss = loss.clone().detach()
+                        loss = loss / self.cfg.accumulation_steps
 
                 self.scaler.scale(loss).backward()
                 update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step+1) == len(self.train_dataloader))
