@@ -23,7 +23,7 @@ class Resnet18ImageEncoder(BaseImageEncoder):
         super().__init__()
 
         # Load pre-trained ResNet-18 and adjust the final layer to match d_embed
-        self.d_embed = d_embed
+        self._d_embed = d_embed
         self.size = size
         self.crop_size = crop_size
         self.freeze = freeze
@@ -72,7 +72,7 @@ class Resnet18ImageEncoder(BaseImageEncoder):
         return image_size
     @property
     def d_embed(self) -> int:
-        return 64
+        return self._d_embed
 
     def _forward(
             self,
