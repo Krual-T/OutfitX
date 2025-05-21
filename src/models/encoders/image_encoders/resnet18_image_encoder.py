@@ -75,17 +75,19 @@ class Resnet18ImageEncoder(BaseImageEncoder):
         return self._d_embed
 
     def _forward(
-            self,
-            images: List[Union[np.ndarray, Image.Image]]
+        self,
+        images: List[Union[np.ndarray, Image.Image, torch.Tensor]],
     ):
-        transformed_images = torch.stack(
-            [
-                self.transform(
-                    Image.fromarray(image) if isinstance(image, np.ndarray) else image
-                ) for image in images
-            ]
-        ).to(self.device)
-
+        if not isinstance(images[0], torch.Tensor):
+            transformed_images = torch.stack(
+                [
+                    self.transform(
+                        Image.fromarray(image) if isinstance(image, np.ndarray) else image
+                    ) for image in images
+                ]
+            ).to(self.device)
+        else:
+            transformed_images = images.to(self.device)
         image_embeddings = self.model(
             transformed_images
         )

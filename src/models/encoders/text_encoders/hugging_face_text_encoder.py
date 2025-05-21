@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from torch import Tensor
 from transformers import AutoModel, AutoTokenizer
-from typing import List
+from typing import List, Union
 from typing import Dict, Any
 
 from src.models.encoders.base_encoders import BaseTextEncoder
@@ -36,7 +36,7 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
     @torch.no_grad()
     def _forward(
             self,
-            texts: List[str],
+            texts: Union[List[str], dict],
             tokenizer_kargs: Dict[str, Any] = None
     ) -> Tensor:
 
@@ -48,10 +48,14 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
         }
 
         tokenizer_kargs['return_tensors'] = 'pt'
-
-        inputs = self.tokenizer(
-            texts, **tokenizer_kargs
-        )
+        if isinstance(texts[0], str):
+            inputs = self.tokenizer(
+                texts, **tokenizer_kargs
+            )
+        elif isinstance(texts[0], dict) and 'input_ids' in texts and 'attention_mask' in texts:
+            inputs = texts
+        else:
+            raise ValueError("Invalid input format")
         inputs = {
             key: value.to(self.device) for key, value in inputs.items()
         }
