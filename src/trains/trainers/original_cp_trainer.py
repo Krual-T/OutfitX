@@ -26,7 +26,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
     def __init__(self, cfg:Optional[CompatibilityPredictionTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']= 'train-valid'):
         if cfg is None:
             cfg = CompatibilityPredictionTrainConfig(
-                batch_size=128,
+                batch_size=100,
                 broadcast_buffers=False,
             )
         super().__init__(cfg=cfg, run_mode=run_mode)
@@ -76,11 +76,11 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                 if update_grad:
                     self.scaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                     self.optimizer.zero_grad()
                     self.scheduler.step()
+                    torch.cuda.empty_cache()
             if self.world_size > 1:
                 dist.barrier()
             # metrics = self.build_metrics(
