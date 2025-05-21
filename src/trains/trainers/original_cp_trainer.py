@@ -45,7 +45,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         }
 
     def train_epoch(self, epoch: int) -> None:
-        torch.set_grad_enabled(True)
+        torch.autograd.set_detect_anomaly(True)
         self.model.train()
 
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
