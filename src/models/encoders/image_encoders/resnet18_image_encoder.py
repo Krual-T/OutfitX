@@ -29,9 +29,6 @@ class Resnet18ImageEncoder(BaseImageEncoder):
         self.freeze = freeze
 
         self.model = resnet18(weights=ResNet18_Weights.DEFAULT)
-        for name, module in self.model.named_modules():
-            if isinstance(module, nn.ReLU):
-                module.inplace = False  # Change inplace to False
         # 改变resnet18的最后一层输出维度 从1000->d_embed：64
         # 将分类器改为特征编码器
         # fc（Fully Connected Layer）：最后的全连接层
