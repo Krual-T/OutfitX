@@ -37,8 +37,8 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         total_batches = len(self.item_dataloader)  # 获取batch总数，用于进度条
         self.log(f"[Rank {self.rank}] 开始预计算所有物品的embedding，共{total_batches}个batch。")
 
-        with torch.no_grad(), tqdm(total=total_batches, desc=f"Rank {self.rank} Precomputing", ncols=100) as pbar:
-            for batch_idx, batch_dict in enumerate(self.item_dataloader):
+        with torch.no_grad(), tqdm(self.item_dataloader, total=total_batches, desc=f"Rank {self.rank} Precomputing", ncols=100) as pbar:
+            for batch_idx, batch_dict in enumerate(pbar):
                 embeddings = self.model(**batch_dict['input_dict'])
                 all_ids.extend(batch_dict['item_id'])
                 all_embeddings.append(embeddings)
