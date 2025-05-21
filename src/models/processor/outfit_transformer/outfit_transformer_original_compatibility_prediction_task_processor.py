@@ -14,7 +14,7 @@ class OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(OutfitTransf
             max_length=max_length
         )
         text_sequences = self._pad_sequences(
-            sequences=[[item.text for item in outfit] for outfit in outfit_seq],
+            sequences=[[item.category for item in outfit] for outfit in outfit_seq],
             max_length=max_length,
             pad_value = self.text_pad
         )
