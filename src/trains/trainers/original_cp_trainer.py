@@ -62,7 +62,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                     )
                     input_dict = {
                         k: (v if k == 'task' else v.to(self.local_rank))
-                        for k, v in batch_dict['input_dict'].items()
+                        for k, v in input_dict.items()
                     }
                     y_hats = self.model(**input_dict).squeeze(dim=-1)
                     labels = batch_dict['label'].to(self.local_rank)
@@ -147,7 +147,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                     )
                     input_dict = {
                         k: (v if k == 'task' else v.to(self.local_rank))
-                        for k, v in batch_dict['input_dict'].items()
+                        for k, v in input_dict.items()
                     }
                     y_hats = self.model(**input_dict).squeeze(dim=-1)
                     labels = batch_dict['label'].to(self.local_rank)
