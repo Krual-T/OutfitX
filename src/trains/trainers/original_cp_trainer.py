@@ -65,7 +65,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             with self.safe_process_context(epoch=epoch):
                 with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
                     input_dict = {
-                        k: (v if k == 'task' or k=='encoder_input_dict' else v.to(self.local_rank))
+                        k: (v if k == 'task' and k=='encoder_input_dict' else v.to(self.local_rank))
                         for k, v in batch_dict['input_dict'].items()
                     }
                     y_hats = self.model(**input_dict).squeeze(dim=-1)
@@ -145,7 +145,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             with self.safe_process_context(epoch=epoch):
                 with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
                     input_dict = {
-                        k: (v if k == 'task' or k=='encoder_input_dict' else v.to(self.local_rank))
+                        k: (v if k == 'task' and k=='encoder_input_dict' else v.to(self.local_rank))
                         for k, v in batch_dict['input_dict'].items()
                     }
                     y_hats = self.model(**input_dict).squeeze(dim=-1)
@@ -210,13 +210,9 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         all_labels = []
         for step, batch_dict in enumerate(test_processor):
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                input_dict = batch_dict['cp_input_dict']
-                input_dict['outfit_embedding'] = self.model.module.item_encoder(
-                    **self.encoder_dict_to_device(batch_dict['encoder_input_dict'])
-                )
                 input_dict = {
-                    k: (v if k == 'task' else v.to(self.local_rank))
-                    for k, v in input_dict.items()
+                    k: (v if k == 'task' and k == 'encoder_input_dict' else v.to(self.local_rank))
+                    for k, v in batch_dict['input_dict'].items()
                 }
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
             labels = batch_dict['label']
