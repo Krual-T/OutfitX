@@ -34,10 +34,10 @@ class Resnet18ImageEncoder(BaseImageEncoder):
         # 改变resnet18的最后一层输出维度 从1000->d_embed：64
         # 将分类器改为特征编码器
         # fc（Fully Connected Layer）：最后的全连接层
-        self.model.fc = nn.Linear(
-            in_features=self.model.fc.in_features,
-            out_features=d_embed
-        )
+        # self.model.fc = nn.Linear(
+        #     in_features=self.model.fc.in_features,
+        #     out_features=d_embed
+        # )
         self.transform = transforms.Compose([
             transforms.Resize(self.size, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(self.crop_size),
