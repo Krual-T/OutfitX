@@ -28,4 +28,4 @@ git reset --hard origin/$BRANCH_NAME || {
 echo "✅ 分支切换成功：$BRANCH_NAME"
 # 🚀 启动训练任务
 echo "🚀 正在运行任务：$TASK_NAME，模式：$MODE"
-torchrun --standalone --nproc_per_node=1 ./src/trains/run/${TASK_NAME}.py --mode=${MODE}
+torchrun --standalone --nproc_per_node=4 ./src/trains/run/${TASK_NAME}.py --mode=${MODE}
