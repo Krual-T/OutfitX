@@ -54,7 +54,6 @@ class OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(OutfitTransf
         inputs = self.tokenizer(
             texts, **self.tokenizer_kargs
         )# （B*max_length）->（B*max_length,token_length）
-        print(inputs.shape)
         texts_tensor = {
             k: v.view(batch_size,max_length, *v.size()[2:]) for k, v in inputs.items()
         }
