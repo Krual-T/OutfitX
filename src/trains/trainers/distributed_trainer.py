@@ -307,7 +307,7 @@ class DistributedTrainer(ABC):
             raise e
         # 初始化模型
         try:
-            model = self.load_model()# torch.compile(self.load_model(), dynamic=True)
+            model = torch.compile(self.load_model())# , dynamic=True
             if model is None:
                 raise ValueError("fn: load_model() must return a model")
             if torch.cuda.is_available():
