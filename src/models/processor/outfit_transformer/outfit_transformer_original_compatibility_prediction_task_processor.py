@@ -73,10 +73,10 @@ class OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(OutfitTransf
                 'task': OutfitCompatibilityPredictionTask,
                 'outfit_embedding': None,
                 'outfit_mask': mask,
+                'encoder_input_dict': encoder_input_dict,
             }
         batch_dict = {
-            'cp_input_dict': cp_input_dict,
-            'encoder_input_dict': encoder_input_dict,
+            'input_dict': cp_input_dict,
             'label': torch.tensor(labels_iter, dtype=torch.float)
         }
         return batch_dict

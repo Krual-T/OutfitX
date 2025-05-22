@@ -121,7 +121,10 @@ class OutfitTransformer(nn.Module):
         self,
         outfit_embedding: torch.Tensor,
         outfit_mask: torch.Tensor,
+        encoder_input_dict: Optional[dict] = None,
      )->torch.Tensor:
+        if encoder_input_dict is not None:
+            outfit_embedding = self.item_encoder(**encoder_input_dict)
         B, L, d_embed = outfit_embedding.shape
         transformer_inputs = torch.cat([
                 self.outfit_token.unsqueeze(0).unsqueeze(0).expand(B, -1, -1), # (B,1,d_embed) d_embed=item_encoder.d_embed

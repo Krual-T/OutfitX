@@ -64,13 +64,9 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         for step,batch_dict in enumerate(train_processor):
             with self.safe_process_context(epoch=epoch):
                 with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                    input_dict = batch_dict['cp_input_dict']
-                    input_dict['outfit_embedding'] = self.model.module.item_encoder(
-                        **self.encoder_dict_to_device(batch_dict['encoder_input_dict'])
-                    )
                     input_dict = {
-                        k: (v if k == 'task' else v.to(self.local_rank))
-                        for k, v in input_dict.items()
+                        k: (v if k == 'task' or k=='encoder_input_dict' else v.to(self.local_rank))
+                        for k, v in batch_dict['input_dict'].items()
                     }
                     y_hats = self.model(**input_dict).squeeze(dim=-1)
                     labels = batch_dict['label'].to(self.local_rank)
@@ -148,13 +144,9 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         for step,batch_dict in enumerate(valid_processor):
             with self.safe_process_context(epoch=epoch):
                 with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
-                    input_dict = batch_dict['cp_input_dict']
-                    input_dict['outfit_embedding'] = self.model.module.item_encoder(
-                        **self.encoder_dict_to_device(batch_dict['encoder_input_dict'])
-                    )
                     input_dict = {
-                        k: (v if k == 'task' else v.to(self.local_rank))
-                        for k, v in input_dict.items()
+                        k: (v if k == 'task' or k=='encoder_input_dict' else v.to(self.local_rank))
+                        for k, v in batch_dict['input_dict'].items()
                     }
                     y_hats = self.model(**input_dict).squeeze(dim=-1)
                     labels = batch_dict['label'].to(self.local_rank)
@@ -301,8 +293,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             shuffle=shuffle_flag if train_sampler is None else False,
             sampler=train_sampler,
             num_workers=self.cfg.dataloader_workers,
-            pin_memory=False,#True,
-            persistent_workers=False,#True if self.cfg.dataloader_workers > 0 else False,
+            pin_memory=True,
+            persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=self.processor
         )
 
@@ -312,8 +304,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             shuffle=False,
             sampler=valid_sampler,
             num_workers=self.cfg.dataloader_workers,
-            pin_memory=False,#True,
-            persistent_workers=False,#True if self.cfg.dataloader_workers > 0 else False,
+            pin_memory=True,
+            persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=self.processor
         )
 
