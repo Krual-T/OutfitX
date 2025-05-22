@@ -26,10 +26,10 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
     def __init__(self, cfg:Optional[CompatibilityPredictionTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']= 'train-valid'):
         if cfg is None:
             cfg = CompatibilityPredictionTrainConfig(
-                batch_size=40,
+                batch_size=80,
                 broadcast_buffers=False,
-                accumulation_steps= 1,
-                dataloader_workers=4
+                accumulation_steps= 5,
+                dataloader_workers=20
             )
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.cfg = cast(CompatibilityPredictionTrainConfig, cfg)
