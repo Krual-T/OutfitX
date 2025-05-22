@@ -28,7 +28,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             cfg = CompatibilityPredictionTrainConfig(
                 batch_size=90,
                 broadcast_buffers=False,
-                accumulation_steps= 5,
+                accumulation_steps= 10,
                 dataloader_workers=20
             )
         super().__init__(cfg=cfg, run_mode=run_mode)
@@ -61,7 +61,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         self.model.train()
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
-        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
+        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}") if self.rank == 0 else self.train_dataloader
         self.optimizer.zero_grad()
         local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
         local_y_hats = []
@@ -138,7 +138,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
     @torch.no_grad()
     def valid_epoch(self, epoch: int):
         self.model.eval()
-        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
+        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}") if self.rank == 0 else self.valid_dataloader
         local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
         local_y_hats = []
         local_labels = []
