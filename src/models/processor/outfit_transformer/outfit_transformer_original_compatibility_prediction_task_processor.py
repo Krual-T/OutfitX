@@ -55,7 +55,7 @@ class OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(OutfitTransf
             texts, **self.tokenizer_kargs
         )# （B*max_length）->（B*max_length,token_length）
         texts_tensor = {
-            k: v.view(batch_size,max_length, *v.size()[2:]) for k, v in inputs.items()
+            k: v.view(batch_size,max_length,*other_dim if (other_dim:=v.size()[2:]) else -1) for k, v in inputs.items()
         }
 
         mask = torch.tensor(
