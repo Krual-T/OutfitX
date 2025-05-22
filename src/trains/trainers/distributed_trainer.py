@@ -307,7 +307,7 @@ class DistributedTrainer(ABC):
             raise e
         # 初始化模型
         try:
-            model = self.load_model()
+            model = torch.compile(self.load_model())
             if model is None:
                 raise ValueError("fn: load_model() must return a model")
             if torch.cuda.is_available():
@@ -324,6 +324,7 @@ class DistributedTrainer(ABC):
                     module= model,
                     find_unused_parameters=self.cfg.find_unused_parameters
                 )
+                self.model = torch.compile(self.model)
             setup_completed("model")
         except Exception as e:
             setup_failed("model")
