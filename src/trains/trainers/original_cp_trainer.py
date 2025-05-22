@@ -83,8 +83,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                     self.scaler.update()
                     self.optimizer.zero_grad()
                     self.scheduler.step()
-            if self.world_size > 1:
-                dist.barrier()
+            # if self.world_size > 1:
+            #     dist.barrier()
             # metrics = self.build_metrics(
             #         local_y_hats=y_hats.detach(),
             #         local_labels=labels.detach(),
@@ -152,8 +152,6 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                     labels = batch_dict['label'].to(self.local_rank)
                     loss = self.loss(y_hat=y_hats, y_true=labels)
                     original_loss = loss.clone().detach()
-            if self.world_size > 1:
-                dist.barrier()
             # metrics = self.build_metrics(
             #         local_y_hats=y_hats.detach(),
             #         local_labels=labels.detach(),
