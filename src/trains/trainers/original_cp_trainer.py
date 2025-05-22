@@ -28,7 +28,9 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             cfg = CompatibilityPredictionTrainConfig(
                 batch_size=100,
                 broadcast_buffers=False,
-                accumulation_steps= 1
+                accumulation_steps= 1,
+                dataloader_workers=8,
+                use_amp=True,
             )
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.cfg = cast(CompatibilityPredictionTrainConfig, cfg)
