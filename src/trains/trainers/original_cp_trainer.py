@@ -45,10 +45,17 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             'Accuracy': 0.0,
             'loss': np.inf,
         }
-    def encoder_dict_to_device(self, encoder_input_dict:dict):
-        encoder_input_dict['images'] = encoder_input_dict['images'].to(self.local_rank)
-        encoder_input_dict['texts'] = {k:v.to(self.local_rank) for k,v in encoder_input_dict['texts'].items()}
-        return encoder_input_dict
+    def batch_dict_to_device(self, batch_dict:dict):
+        batch_dict['input_dict'] = {
+            k: (v if k == 'task' or k == 'outfit_embedding' or k == 'encoder_input_dict' else v.to(self.local_rank))
+            for k, v in batch_dict['input_dict'].items()
+        }
+        batch_dict['label'] = batch_dict['label'].to(self.local_rank)
+        batch_dict['encoder_input_dict']['images'] = batch_dict['encoder_input_dict']['images'].to(self.local_rank)
+        batch_dict['encoder_input_dict']['texts'] = {
+            k:v.to(self.local_rank) for k,v in batch_dict['encoder_input_dict']['texts'].items()
+        }
+        return batch_dict
 
     def train_epoch(self, epoch: int) -> None:
         # torch.backends.cuda.enable_flash_sdp(False)
@@ -64,10 +71,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         local_labels = []
         for step,batch_dict in enumerate(train_processor):
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                input_dict = {
-                    k: (v if k == 'task' or k=='outfit_embedding' or k=='encoder_input_dict' else v.to(self.local_rank))
-                    for k, v in batch_dict['input_dict'].items()
-                }
+                batch_dict = self.batch_dict_to_device(batch_dict)
+                input_dict = batch_dict['input_dict']
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
                 labels = batch_dict['label'].to(self.local_rank)
                 loss = self.loss(y_hat=y_hats, y_true=labels)
@@ -143,10 +148,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         local_labels = []
         for step,batch_dict in enumerate(valid_processor):
             with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
-                input_dict = {
-                    k: (v if k == 'task' or k=='outfit_embedding' or k=='encoder_input_dict' else v.to(self.local_rank))
-                    for k, v in batch_dict['input_dict'].items()
-                }
+                batch_dict = self.batch_dict_to_device(batch_dict)
+                input_dict = batch_dict['input_dict']
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
                 labels = batch_dict['label'].to(self.local_rank)
                 loss = self.loss(y_hat=y_hats, y_true=labels)
@@ -209,10 +212,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         all_labels = []
         for step, batch_dict in enumerate(test_processor):
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                input_dict = {
-                    k: (v if k == 'task' or k == 'outfit_embedding' or k == 'encoder_input_dict' else v.to(self.local_rank))
-                    for k, v in batch_dict['input_dict'].items()
-                }
+                batch_dict = self.batch_dict_to_device(batch_dict)
+                input_dict = batch_dict['input_dict']
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
             labels = batch_dict['label']
             all_y_hats.append(y_hats.detach())
