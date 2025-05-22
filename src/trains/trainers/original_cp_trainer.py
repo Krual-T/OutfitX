@@ -46,16 +46,18 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             'loss': np.inf,
         }
     def batch_dict_to_device(self, batch_dict:dict):
-        batch_dict['input_dict'] = {
-            k: (v if k == 'task' or k == 'outfit_embedding' or k == 'encoder_input_dict' else v.to(self.local_rank))
-            for k, v in batch_dict['input_dict'].items()
-        }
-        batch_dict['label'] = batch_dict['label'].to(self.local_rank)
+        input_dict = batch_dict['input_dict']
+        input_dict['outfit_mask'] = input_dict['outfit_mask'].to(self.local_rank)
         batch_dict['encoder_input_dict']['images'] = batch_dict['encoder_input_dict']['images'].to(self.local_rank)
         batch_dict['encoder_input_dict']['texts'] = {
             k:v.to(self.local_rank) for k,v in batch_dict['encoder_input_dict']['texts'].items()
         }
-        return batch_dict
+        input_dict = batch_dict['input_dict']
+        input_dict['encoder_input_dict']['images'] = input_dict['encoder_input_dict']['images'].to(self.local_rank)
+        input_dict['encoder_input_dict']['texts'] = {
+            k: v.to(self.local_rank) for k, v in input_dict['encoder_input_dict']['texts'].items()
+        }
+        return input_dict
 
     def train_epoch(self, epoch: int) -> None:
         # torch.backends.cuda.enable_flash_sdp(False)
