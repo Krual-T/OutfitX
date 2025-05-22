@@ -279,6 +279,8 @@ class DistributedTrainer(ABC):
         dist.init_process_group(backend=self.cfg.backend, init_method="env://")
 
     def setup(self):
+        # 在这里禁用 cuDNN
+        torch.backends.cudnn.enabled = False
         if not self._entered:
             raise RuntimeError("DistributedTrainer must be run as torchrun command and used in a 'with' block  ")
         setup_completed = lambda msg: self.log(f"{msg} 初始化完成",level="info")
