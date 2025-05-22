@@ -301,8 +301,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             shuffle=shuffle_flag if train_sampler is None else False,
             sampler=train_sampler,
             num_workers=self.cfg.dataloader_workers,
-            pin_memory=True,
-            persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
+            pin_memory=False,#True,
+            persistent_workers=False,#True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=self.processor
         )
 
@@ -312,8 +312,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             shuffle=False,
             sampler=valid_sampler,
             num_workers=self.cfg.dataloader_workers,
-            pin_memory=True,
-            persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
+            pin_memory=False,#True,
+            persistent_workers=False,#True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=self.processor
         )
 
