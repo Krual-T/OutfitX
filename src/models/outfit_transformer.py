@@ -126,11 +126,11 @@ class OutfitTransformer(nn.Module):
         transformer_inputs = torch.cat([
                 self.outfit_token.unsqueeze(0).unsqueeze(0).expand(B, -1, -1), # (B,1,d_embed) d_embed=item_encoder.d_embed
                 outfit_embedding # (B,L,d_embed)
-             ],dim=1) # (B,1+L,d_embed)
+             ],dim=1).contiguous() # (B,1+L,d_embed)
         mask = torch.cat([
             torch.zeros(B, 1, dtype=torch.bool, device=self.device), # [B, 1]
             outfit_mask # [B, L]
-        ], dim=1) # [B, 1+L]
+        ], dim=1).contiguous() # [B, 1+L]
         transformer_outputs = self.transformer_encoder(
             src=transformer_inputs,
             src_key_padding_mask=mask
@@ -154,10 +154,10 @@ class OutfitTransformer(nn.Module):
             dim=-1
         ).unsqueeze(1)# [B,1, d_embed]
 
-        embeddings = torch.cat([target_items_embedding, outfit_embedding],dim=1)# [B, 1, d_embed] + [B, L, d_embed] -> [B, 1+L, d_embed]
+        embeddings = torch.cat([target_items_embedding, outfit_embedding],dim=1).contiguous()# [B, 1, d_embed] + [B, L, d_embed] -> [B, 1+L, d_embed]
 
         prefix_mask = torch.zeros(B, 1, dtype=torch.bool, device=self.device)
-        mask = torch.cat([prefix_mask, outfit_mask], dim=1) # [B, 1+L]
+        mask = torch.cat([prefix_mask, outfit_mask], dim=1).contiguous() # [B, 1+L]
 
         transformer_outputs = self.transformer_encoder(
             src=embeddings,
