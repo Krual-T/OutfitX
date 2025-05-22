@@ -308,7 +308,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         self.valid_dataloader = DataLoader(
             dataset=valid_dataset,
             batch_size=self.cfg.batch_size,
-            shuffle=True,
+            shuffle=False,
             sampler=valid_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
