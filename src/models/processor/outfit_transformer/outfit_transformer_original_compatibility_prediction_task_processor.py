@@ -50,10 +50,7 @@ class OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(OutfitTransf
             pad_value=self.text_pad,
             return_tensor=False
         )
-        texts = flatten_seq_to_one_dim([
-            [item.category for item in outfit]
-            for outfit in outfit_seq
-        ])# (B,max_L) ->（B*max_length）
+        texts = flatten_seq_to_one_dim(text_seq)# (B,max_L) ->（B*max_length）
         inputs = self.tokenizer(
             texts, **self.tokenizer_kargs
         )# （B*max_length）->（B*max_length,token_length）
