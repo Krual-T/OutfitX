@@ -46,6 +46,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
     def encoder_dict_to_device(self, encoder_input_dict:dict):
         encoder_input_dict['images'] = encoder_input_dict['images'].to(self.local_rank)
         encoder_input_dict['texts'] = {k:v.to(self.local_rank) for k,v in encoder_input_dict['texts'].items()}
+        return encoder_input_dict
 
     def train_epoch(self, epoch: int) -> None:
         self.model.train()
