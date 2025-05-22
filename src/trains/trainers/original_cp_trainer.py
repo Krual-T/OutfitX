@@ -26,8 +26,10 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
     def __init__(self, cfg:Optional[CompatibilityPredictionTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']= 'train-valid'):
         if cfg is None:
             cfg = CompatibilityPredictionTrainConfig(
-                batch_size=100,
+                batch_size=350,
                 broadcast_buffers=False,
+                accumulation_steps= 10,
+                dataloader_workers=8
             )
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.cfg = cast(CompatibilityPredictionTrainConfig, cfg)
@@ -43,46 +45,47 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             'Accuracy': 0.0,
             'loss': np.inf,
         }
+    def input_dict_to_device(self, batch_dict:dict):
+        input_dict = batch_dict['input_dict']
+        input_dict['outfit_mask'] = input_dict['outfit_mask'].to(self.local_rank,non_blocking=True)
+        input_dict['encoder_input_dict']['images'] = input_dict['encoder_input_dict']['images'].to(self.local_rank,non_blocking=True)
+        input_dict['encoder_input_dict']['texts'] = {
+            k: v.to(self.local_rank,non_blocking=True) for k, v in input_dict['encoder_input_dict']['texts'].items()
+        }
+        return input_dict
 
     def train_epoch(self, epoch: int) -> None:
+        # torch.backends.cuda.enable_flash_sdp(False)
+        # torch.backends.cuda.enable_math_sdp(True)
+        # torch.backends.cuda.enable_mem_efficient_sdp(False)
         self.model.train()
-
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
-        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
+        train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}") if self.rank == 0 else self.train_dataloader
         self.optimizer.zero_grad()
         local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
         local_y_hats = []
         local_labels = []
         for step,batch_dict in enumerate(train_processor):
-            with self.safe_process_context(epoch=epoch):
-                with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                    input_dict = batch_dict['cp_input_dict']
-                    input_dict['outfit_embedding'] = self.model.module.item_encoder(
-                        **batch_dict['encoder_input_dict']
-                    )
-                    input_dict = {
-                        k: (v if k == 'task' else v.to(self.local_rank))
-                        for k, v in input_dict.items()
-                    }
-                    y_hats = self.model(**input_dict).squeeze(dim=-1)
-                    labels = batch_dict['label'].to(self.local_rank)
-                    loss = self.loss(y_hat=y_hats, y_true=labels)
-                    original_loss = loss.clone().detach()
-                    loss = loss / self.cfg.accumulation_steps
+            with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
+                input_dict = self.input_dict_to_device(batch_dict)
+                y_hats = self.model(**input_dict).squeeze(dim=-1)
+                labels = batch_dict['label'].to(self.local_rank,non_blocking=True)
+                loss = self.loss(y_hat=y_hats, y_true=labels)
+                original_loss = loss.clone().detach()
+                loss = loss / self.cfg.accumulation_steps
 
-                self.scaler.scale(loss).backward()
-                update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step+1) == len(self.train_dataloader))
-                if update_grad:
-                    self.scaler.unscale_(self.optimizer)
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                    self.optimizer.zero_grad()
-                    self.scheduler.step()
-                    torch.cuda.empty_cache()
-            if self.world_size > 1:
-                dist.barrier()
+            self.scaler.scale(loss).backward()
+            update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step+1) == len(self.train_dataloader))
+            if update_grad:
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad(set_to_none=True)
+                self.scheduler.step()
+            # if self.world_size > 1:
+            #     dist.barrier()
             # metrics = self.build_metrics(
             #         local_y_hats=y_hats.detach(),
             #         local_labels=labels.detach(),
@@ -111,9 +114,9 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
 
         local_y_hats = torch.cat(local_y_hats, dim=0)
         local_labels = torch.cat(local_labels, dim=0)
-        if self.world_size > 1:
-            dist.barrier()
-
+        # if self.world_size > 1:
+        #     dist.barrier()
+        #
         metrics = self.build_metrics(
             local_y_hats=local_y_hats,
             local_labels=local_labels,
@@ -135,27 +138,17 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
     @torch.no_grad()
     def valid_epoch(self, epoch: int):
         self.model.eval()
-        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}")
+        valid_processor = tqdm(self.valid_dataloader, desc=f"Epoch {epoch+1}/{self.cfg.n_epochs}") if self.rank == 0 else self.valid_dataloader
         local_total_loss = torch.tensor(0.0, device=self.local_rank, dtype=torch.float32)
         local_y_hats = []
         local_labels = []
         for step,batch_dict in enumerate(valid_processor):
-            with self.safe_process_context(epoch=epoch):
-                with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
-                    input_dict = batch_dict['cp_input_dict']
-                    input_dict['outfit_embedding'] = self.model.module.item_encoder(
-                        **batch_dict['encoder_input_dict']
-                    )
-                    input_dict = {
-                        k: (v if k == 'task' else v.to(self.local_rank))
-                        for k, v in input_dict.items()
-                    }
-                    y_hats = self.model(**input_dict).squeeze(dim=-1)
-                    labels = batch_dict['label'].to(self.local_rank)
-                    loss = self.loss(y_hat=y_hats, y_true=labels)
-                    original_loss = loss.clone().detach()
-            if self.world_size > 1:
-                dist.barrier()
+            with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
+                input_dict = self.input_dict_to_device(batch_dict)
+                y_hats = self.model(**input_dict).squeeze(dim=-1)
+                labels = batch_dict['label'].to(self.local_rank)
+                loss = self.loss(y_hat=y_hats, y_true=labels)
+                original_loss = loss.clone().detach()
             # metrics = self.build_metrics(
             #         local_y_hats=y_hats.detach(),
             #         local_labels=labels.detach(),
@@ -214,14 +207,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         all_labels = []
         for step, batch_dict in enumerate(test_processor):
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                input_dict = batch_dict['cp_input_dict']
-                input_dict['outfit_embedding'] = self.model.module.item_encoder(
-                    **batch_dict['encoder_input_dict']
-                )
-                input_dict = {
-                    k: (v if k == 'task' else v.to(self.local_rank))
-                    for k, v in input_dict.items()
-                }
+                input_dict = self.input_dict_to_device(batch_dict)
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
             labels = batch_dict['label']
             all_y_hats.append(y_hats.detach())
@@ -256,14 +242,16 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             polyvore_type=self.cfg.polyvore_type,
             mode='train',
             dataset_dir=self.cfg.dataset_dir,
-            load_image=True
+            load_image=True,
+            load_image_tensor=True
         )
 
         valid_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='valid',
             dataset_dir=self.cfg.dataset_dir,
-            load_image=True
+            load_image=True,
+            load_image_tensor = True
         )
 
         # ✅ 根据是否分布式，动态选择 sampler
@@ -295,18 +283,20 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
-            collate_fn=self.processor
+            collate_fn=self.processor,
+            prefetch_factor=1,
         )
 
         self.valid_dataloader = DataLoader(
             dataset=valid_dataset,
             batch_size=self.cfg.batch_size,
-            shuffle=True,
+            shuffle=False,
             sampler=valid_sampler,
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
-            collate_fn=self.processor
+            collate_fn=self.processor,
+            prefetch_factor=1,
         )
 
     def setup_test_dataloader(self):
@@ -317,7 +307,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             mode='test',
             dataset_dir=self.cfg.dataset_dir,
             # embedding_dict=item_embeddings,
-            load_image=True
+            load_image=True,
+            load_image_tensor=True
         )
         self.test_dataloader = DataLoader(
             dataset=test_dataset,
@@ -386,14 +377,13 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         epoch:int,
         batch_count:int = 1,
     ):
-        with self.safe_process_context(epoch=epoch):
-            local_y_hats = local_y_hats.detach()
-            local_labels = local_labels.detach()
-            local_loss = local_loss.detach()
-            # 一般不会很大，所以可以直接 gather 到当前进程
-            all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
-            all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
-            all_loss = [torch.empty_like(local_loss) for _ in range(self.world_size)]
+        local_y_hats = local_y_hats.detach()
+        local_labels = local_labels.detach()
+        local_loss = local_loss.detach()
+        # 一般不会很大，所以可以直接 gather 到当前进程
+        all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
+        all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
+        all_loss = [torch.empty_like(local_loss) for _ in range(self.world_size)]
         if self.world_size > 1:
             dist.all_gather(all_y_hats, local_y_hats)
             dist.all_gather(all_labels, local_labels)
@@ -496,6 +486,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
     #     }
 
     def maybe_save_best_models(self, metrics: dict, epoch: int):
+        if self.rank != 0:
+            return
         for metric,metric_value in metrics.items():
             if metric !='AUC' and metric!='loss':
                 continue

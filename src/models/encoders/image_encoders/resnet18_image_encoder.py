@@ -18,7 +18,7 @@ class Resnet18ImageEncoder(BaseImageEncoder):
             d_embed: int = 64,
             size: int = 224,
             crop_size: int = 224,
-            freeze: bool = False
+            freeze: bool = True
     ):
         super().__init__()
 
@@ -29,6 +29,8 @@ class Resnet18ImageEncoder(BaseImageEncoder):
         self.freeze = freeze
 
         self.model = resnet18(weights=ResNet18_Weights.DEFAULT)
+        if freeze:
+            freeze_model(self.model)
         # 改变resnet18的最后一层输出维度 从1000->d_embed：64
         # 将分类器改为特征编码器
         # fc（Fully Connected Layer）：最后的全连接层
@@ -36,9 +38,6 @@ class Resnet18ImageEncoder(BaseImageEncoder):
             in_features=self.model.fc.in_features,
             out_features=d_embed
         )
-        if freeze:
-            freeze_model(self.model)
-
         self.transform = transforms.Compose([
             transforms.Resize(self.size, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(self.crop_size),

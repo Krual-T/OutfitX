@@ -20,7 +20,7 @@ class BaseTextEncoder(nn.Module, ABC):
         if isinstance(texts, dict):
             batch_size = texts['input_ids'].size(0)
             text_length = texts['input_ids'].size(1)
-            texts = {k: v.view(batch_size * text_length, *v.size()[2:]) for k, v in texts.items()}
+            texts = {k: v.view(batch_size * text_length, -1) for k, v in texts.items()}
         else:
             if not self.__is_sequence_elements_length_consistent(texts):
                 raise ValueError('All sequences in texts should have the same length.')

@@ -21,7 +21,9 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
     """
     def __init__(self,cfg:PrecomputeEmbeddingConfig = None):
         if cfg is None:
-            cfg = PrecomputeEmbeddingConfig()
+            cfg = PrecomputeEmbeddingConfig(
+                batch_size=5000,
+            )
         super().__init__(cfg=cfg, run_mode='custom')
         self.cfg = cfg
         self.model_cfg = OutfitTransformerConfig()

@@ -279,6 +279,8 @@ class DistributedTrainer(ABC):
         dist.init_process_group(backend=self.cfg.backend, init_method="env://")
 
     def setup(self):
+        # 在这里禁用 cuDNN
+        torch.backends.cudnn.enabled = False
         if not self._entered:
             raise RuntimeError("DistributedTrainer must be run as torchrun command and used in a 'with' block  ")
         setup_completed = lambda msg: self.log(f"{msg} 初始化完成",level="info")
@@ -307,7 +309,7 @@ class DistributedTrainer(ABC):
             raise e
         # 初始化模型
         try:
-            model = self.load_model()
+            model = self.load_model()#torch.compile(, dynamic=True)#
             if model is None:
                 raise ValueError("fn: load_model() must return a model")
             if torch.cuda.is_available():
@@ -324,6 +326,7 @@ class DistributedTrainer(ABC):
                     module= model,
                     find_unused_parameters=self.cfg.find_unused_parameters
                 )
+                self.model = torch.compile(self.model)
             setup_completed("model")
         except Exception as e:
             setup_failed("model")
@@ -629,10 +632,10 @@ class DistributedTrainer(ABC):
         self.local_rank = int(os.environ["LOCAL_RANK"])
         self.rank = int(os.environ["RANK"])
         self.world_size = int(os.environ["WORLD_SIZE"])
-        self.cfg.dataloader_workers = min(
-            self.cfg.dataloader_workers,
-            max(1, (os.cpu_count() // max(1,torch.cuda.device_count()))-1)
-        )
+        # self.cfg.dataloader_workers = min(
+        #     self.cfg.dataloader_workers,
+        #     max(1, (os.cpu_count() // max(1,torch.cuda.device_count()))-1)
+        # )
         self.setup()
 
         return self

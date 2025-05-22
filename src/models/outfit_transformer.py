@@ -121,22 +121,25 @@ class OutfitTransformer(nn.Module):
         self,
         outfit_embedding: torch.Tensor,
         outfit_mask: torch.Tensor,
+        encoder_input_dict: Optional[dict] = None,
      )->torch.Tensor:
+        if encoder_input_dict is not None:
+            outfit_embedding = self.item_encoder(**encoder_input_dict)
         B, L, d_embed = outfit_embedding.shape
         transformer_inputs = torch.cat([
                 self.outfit_token.unsqueeze(0).unsqueeze(0).expand(B, -1, -1), # (B,1,d_embed) d_embed=item_encoder.d_embed
                 outfit_embedding # (B,L,d_embed)
-             ],dim=1) # (B,1+L,d_embed)
+             ],dim=1).contiguous() # (B,1+L,d_embed)
         mask = torch.cat([
             torch.zeros(B, 1, dtype=torch.bool, device=self.device), # [B, 1]
             outfit_mask # [B, L]
-        ], dim=1) # [B, 1+L]
+        ], dim=1).contiguous() # [B, 1+L]
         transformer_outputs = self.transformer_encoder(
             src=transformer_inputs,
             src_key_padding_mask=mask
-        )
+        ).contiguous()
         # 取出outfit_token的输出
-        outfit_token_states = transformer_outputs[:, 0, :] # [B, d_embed]
+        outfit_token_states = transformer_outputs[:, 0, :].contiguous() # [B, d_embed]
         scores = self.cp_ffn(outfit_token_states) # [B, 1]
         return scores
 
@@ -154,17 +157,17 @@ class OutfitTransformer(nn.Module):
             dim=-1
         ).unsqueeze(1)# [B,1, d_embed]
 
-        embeddings = torch.cat([target_items_embedding, outfit_embedding],dim=1)# [B, 1, d_embed] + [B, L, d_embed] -> [B, 1+L, d_embed]
+        embeddings = torch.cat([target_items_embedding, outfit_embedding],dim=1).contiguous()# [B, 1, d_embed] + [B, L, d_embed] -> [B, 1+L, d_embed]
 
         prefix_mask = torch.zeros(B, 1, dtype=torch.bool, device=self.device)
-        mask = torch.cat([prefix_mask, outfit_mask], dim=1) # [B, 1+L]
+        mask = torch.cat([prefix_mask, outfit_mask], dim=1).contiguous() # [B, 1+L]
 
         transformer_outputs = self.transformer_encoder(
             src=embeddings,
             src_key_padding_mask=mask
-        )
+        ).contiguous()
         # 取出target_item_token的输出
-        target_item_token_states = transformer_outputs[:, 0, :] # [B, d_embed]
+        target_item_token_states = transformer_outputs[:, 0, :].contiguous() # [B, d_embed]
         target_item_embeddings = self.cir_ffn(target_item_token_states) # [B, d_embed]
         return target_item_embeddings
 

@@ -1,6 +1,8 @@
 import numpy as np
 
-from typing import Optional
+from typing import Optional, Union
+
+import torch
 from PIL import Image
 from pydantic import BaseModel, Field
 
@@ -14,7 +16,7 @@ class FashionItem(BaseModel):
         default="",
         description="Category of the item"
     )
-    image: Optional[Image.Image] = Field(
+    image: Optional[Union[Image.Image, torch.Tensor]] = Field(
         default=None,
         description="Image of the item"
     )
@@ -34,6 +36,5 @@ class FashionItem(BaseModel):
         default=None,
         description="category embedding of the item"
     )
-
     class Config:
         arbitrary_types_allowed = True

@@ -2,6 +2,7 @@ import json
 import pathlib
 from unittest import TestCase
 
+import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from src.models.datatypes import FashionItem, OutfitPrecomputeEmbeddingTask
@@ -11,11 +12,12 @@ from src.project_settings.info import PROJECT_DIR
 class PolyvoreItemDataset(Dataset):
     embed_file_prefix = 'embedding_subset_'
     def __init__(
-            self,
-            dataset_dir: pathlib.Path,
-            metadata: dict = None,
-            embedding_dict: dict = None,
-            load_image: bool = False
+        self,
+        dataset_dir: pathlib.Path,
+        metadata: dict = None,
+        embedding_dict: dict = None,
+        load_image: bool = False,
+        load_image_tensor: bool = False
     ):
         self.dataset_dir = dataset_dir
         self.metadata = self.load_metadata() if metadata is None else metadata
@@ -23,6 +25,15 @@ class PolyvoreItemDataset(Dataset):
         self.categories = self.load_categories()
         self.embedding_dict = embedding_dict
         self.all_item_ids = list(self.metadata.keys())
+        self.load_image_tensor = load_image_tensor
+        if self.load_image_tensor:
+            from torchvision import transforms
+            self.transform = transforms.Compose([
+                transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
 
     def __len__(self):
         return len(self.all_item_ids)
@@ -66,6 +77,9 @@ class PolyvoreItemDataset(Dataset):
         if self.load_image:
             image_path = self.dataset_dir / 'images' / f'{item_id}.jpg'
             image = Image.open(image_path)
+            if self.load_image_tensor:
+                image = self.transform(image)
+
         item = FashionItem(
             item_id=item_id,
             category=category,
