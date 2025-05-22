@@ -116,28 +116,28 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             local_labels.append(labels.detach())
             # batch end--------------------------------------------------------------------------------------------------------
 
-        # local_y_hats = torch.cat(local_y_hats, dim=0)
-        # local_labels = torch.cat(local_labels, dim=0)
+        local_y_hats = torch.cat(local_y_hats, dim=0)
+        local_labels = torch.cat(local_labels, dim=0)
         # if self.world_size > 1:
         #     dist.barrier()
         #
-        # metrics = self.build_metrics(
-        #     local_y_hats=local_y_hats,
-        #     local_labels=local_labels,
-        #     local_loss=local_total_loss,
-        #     batch_count=len(self.train_dataloader),
-        #     epoch=epoch+1
-        # )
-        # metrics = {f'{k}/train/epoch': v for k, v in metrics.items()}
-        # metrics = {
-        #     'epoch':epoch+1,
-        #     **metrics
-        # }
-        # self.log(
-        #     level='info',
-        #     msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} -->Train End \n {str(metrics)}",
-        #     metrics=metrics
-        # )
+        metrics = self.build_metrics(
+            local_y_hats=local_y_hats,
+            local_labels=local_labels,
+            local_loss=local_total_loss,
+            batch_count=len(self.train_dataloader),
+            epoch=epoch+1
+        )
+        metrics = {f'{k}/train/epoch': v for k, v in metrics.items()}
+        metrics = {
+            'epoch':epoch+1,
+            **metrics
+        }
+        self.log(
+            level='info',
+            msg=f"Epoch {epoch+1}/{self.cfg.n_epochs} -->Train End \n {str(metrics)}",
+            metrics=metrics
+        )
 
     @torch.no_grad()
     def valid_epoch(self, epoch: int):
