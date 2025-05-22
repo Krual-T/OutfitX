@@ -47,10 +47,10 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         }
     def input_dict_to_device(self, batch_dict:dict):
         input_dict = batch_dict['input_dict']
-        input_dict['outfit_mask'] = input_dict['outfit_mask'].to(self.local_rank)
-        input_dict['encoder_input_dict']['images'] = input_dict['encoder_input_dict']['images'].to(self.local_rank)
+        input_dict['outfit_mask'] = input_dict['outfit_mask'].to(self.local_rank,non_blocking=True)
+        input_dict['encoder_input_dict']['images'] = input_dict['encoder_input_dict']['images'].to(self.local_rank,non_blocking=True)
         input_dict['encoder_input_dict']['texts'] = {
-            k: v.to(self.local_rank) for k, v in input_dict['encoder_input_dict']['texts'].items()
+            k: v.to(self.local_rank,non_blocking=True) for k, v in input_dict['encoder_input_dict']['texts'].items()
         }
         return input_dict
 
@@ -70,7 +70,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
                 input_dict = self.input_dict_to_device(batch_dict)
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
-                labels = batch_dict['label'].to(self.local_rank)
+                labels = batch_dict['label'].to(self.local_rank,non_blocking=True)
                 loss = self.loss(y_hat=y_hats, y_true=labels)
                 original_loss = loss.clone().detach()
                 loss = loss / self.cfg.accumulation_steps
