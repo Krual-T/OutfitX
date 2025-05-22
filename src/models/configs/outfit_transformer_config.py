@@ -8,7 +8,7 @@ from .transformer_config import TransformerConfig
 @dataclass
 class OutfitTransformerConfig:
     # 定义填充策略，可选值为 'longest' 或 'max_length' ，默认为 'longest'
-    padding: Literal['longest', 'max_length'] = 'max_length' #'longest'
+    padding: Literal['longest', 'max_length'] = 'longest'
     # 定义最大长度，默认为16
     max_length: int = 16
     # 定义是否进行截断，默认为True
