@@ -49,8 +49,10 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         return encoder_input_dict
 
     def train_epoch(self, epoch: int) -> None:
+        torch.backends.cuda.enable_flash_sdp(False)
+        torch.backends.cuda.enable_math_sdp(True)
+        torch.backends.cuda.enable_mem_efficient_sdp(False)
         self.model.train()
-
         if hasattr(self.train_dataloader.sampler, 'set_epoch'):
             self.train_dataloader.sampler.set_epoch(epoch)
         train_processor = tqdm(self.train_dataloader, desc=f"Epoch {epoch}/{self.cfg.n_epochs}")
