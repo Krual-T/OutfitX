@@ -1,5 +1,7 @@
 import click
-
+import torch
+# 在这里禁用 cuDNN
+torch.backends.cudnn.enabled = False
 @click.command()
 @click.option('--mode', type=click.Choice(['train-valid', 'test']), default='train-valid', help='运行模式')
 def run(mode):
