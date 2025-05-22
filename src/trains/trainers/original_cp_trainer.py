@@ -256,14 +256,16 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             polyvore_type=self.cfg.polyvore_type,
             mode='train',
             dataset_dir=self.cfg.dataset_dir,
-            load_image=True
+            load_image=True,
+            load_image_tensor=True
         )
 
         valid_dataset = PolyvoreCompatibilityPredictionDataset(
             polyvore_type=self.cfg.polyvore_type,
             mode='valid',
             dataset_dir=self.cfg.dataset_dir,
-            load_image=True
+            load_image=True,
+            load_image_tensor = True
         )
 
         # ✅ 根据是否分布式，动态选择 sampler
@@ -317,7 +319,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             mode='test',
             dataset_dir=self.cfg.dataset_dir,
             # embedding_dict=item_embeddings,
-            load_image=True
+            load_image=True,
+            load_image_tensor=True
         )
         self.test_dataloader = DataLoader(
             dataset=test_dataset,

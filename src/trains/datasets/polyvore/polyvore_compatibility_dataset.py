@@ -15,13 +15,15 @@ class PolyvoreCompatibilityPredictionDataset(PolyvoreItemDataset):
         dataset_dir:pathlib.Path = ROOT_DIR / 'datasets' / 'polyvore',
         metadata: dict = None,
         embedding_dict: dict = None,
-        load_image: bool = False
+        load_image: bool = False,
+        load_image_tensor: bool = False,
     ):
         super().__init__(
             dataset_dir=dataset_dir,
             metadata=metadata,
             embedding_dict=embedding_dict,
-            load_image=load_image
+            load_image=load_image,
+            load_image_tensor=load_image_tensor
         )
         cp_dataset_path = dataset_dir / polyvore_type / 'compatibility' /f'{mode}.json'
         with open(cp_dataset_path, 'r',encoding='utf-8') as f:
