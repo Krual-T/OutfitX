@@ -45,14 +45,9 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             'Accuracy': 0.0,
             'loss': np.inf,
         }
-    def batch_dict_to_device(self, batch_dict:dict):
+    def input_dict_to_device(self, batch_dict:dict):
         input_dict = batch_dict['input_dict']
         input_dict['outfit_mask'] = input_dict['outfit_mask'].to(self.local_rank)
-        batch_dict['encoder_input_dict']['images'] = batch_dict['encoder_input_dict']['images'].to(self.local_rank)
-        batch_dict['encoder_input_dict']['texts'] = {
-            k:v.to(self.local_rank) for k,v in batch_dict['encoder_input_dict']['texts'].items()
-        }
-        input_dict = batch_dict['input_dict']
         input_dict['encoder_input_dict']['images'] = input_dict['encoder_input_dict']['images'].to(self.local_rank)
         input_dict['encoder_input_dict']['texts'] = {
             k: v.to(self.local_rank) for k, v in input_dict['encoder_input_dict']['texts'].items()
@@ -73,8 +68,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         local_labels = []
         for step,batch_dict in enumerate(train_processor):
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                batch_dict = self.batch_dict_to_device(batch_dict)
-                input_dict = batch_dict['input_dict']
+                input_dict = self.input_dict_to_device(batch_dict)
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
                 labels = batch_dict['label'].to(self.local_rank)
                 loss = self.loss(y_hat=y_hats, y_true=labels)
@@ -150,8 +144,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         local_labels = []
         for step,batch_dict in enumerate(valid_processor):
             with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
-                batch_dict = self.batch_dict_to_device(batch_dict)
-                input_dict = batch_dict['input_dict']
+                input_dict = self.input_dict_to_device(batch_dict)
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
                 labels = batch_dict['label'].to(self.local_rank)
                 loss = self.loss(y_hat=y_hats, y_true=labels)
@@ -214,8 +207,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         all_labels = []
         for step, batch_dict in enumerate(test_processor):
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                batch_dict = self.batch_dict_to_device(batch_dict)
-                input_dict = batch_dict['input_dict']
+                input_dict = self.input_dict_to_device(batch_dict)
                 y_hats = self.model(**input_dict).squeeze(dim=-1)
             labels = batch_dict['label']
             all_y_hats.append(y_hats.detach())
