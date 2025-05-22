@@ -26,7 +26,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
     def __init__(self, cfg:Optional[CompatibilityPredictionTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']= 'train-valid'):
         if cfg is None:
             cfg = CompatibilityPredictionTrainConfig(
-                batch_size=85,
+                batch_size=256,
                 broadcast_buffers=False,
                 accumulation_steps= 10,
                 dataloader_workers=12
