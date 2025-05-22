@@ -380,14 +380,13 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         epoch:int,
         batch_count:int = 1,
     ):
-        with self.safe_process_context(epoch=epoch):
-            local_y_hats = local_y_hats.detach()
-            local_labels = local_labels.detach()
-            local_loss = local_loss.detach()
-            # 一般不会很大，所以可以直接 gather 到当前进程
-            all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
-            all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
-            all_loss = [torch.empty_like(local_loss) for _ in range(self.world_size)]
+        local_y_hats = local_y_hats.detach()
+        local_labels = local_labels.detach()
+        local_loss = local_loss.detach()
+        # 一般不会很大，所以可以直接 gather 到当前进程
+        all_y_hats = [torch.empty_like(local_y_hats) for _ in range(self.world_size)]
+        all_labels = [torch.empty_like(local_labels) for _ in range(self.world_size)]
+        all_loss = [torch.empty_like(local_loss) for _ in range(self.world_size)]
         if self.world_size > 1:
             dist.all_gather(all_y_hats, local_y_hats)
             dist.all_gather(all_labels, local_labels)
