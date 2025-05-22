@@ -40,7 +40,7 @@ class HuggingFaceTextEncoder(BaseTextEncoder):
             tokenizer_kargs: Dict[str, Any] = None
     ) -> Tensor:
 
-        if isinstance(texts[0], str):
+        if isinstance(texts, list):
             tokenizer_kargs = tokenizer_kargs if tokenizer_kargs is not None else {
                 'max_length': 32,
                 'padding': 'max_length',
