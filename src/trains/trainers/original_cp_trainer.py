@@ -291,8 +291,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
-            collate_fn=self.processor,
-            prefetch_factor=2
+            collate_fn=self.processor
         )
 
         self.valid_dataloader = DataLoader(
@@ -303,8 +302,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             num_workers=self.cfg.dataloader_workers,
             pin_memory=True,
             persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
-            collate_fn=self.processor,
-            prefetch_factor=2
+            collate_fn=self.processor
         )
 
     def setup_test_dataloader(self):
@@ -323,8 +321,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             batch_size=self.cfg.batch_size,
             shuffle=False,
             num_workers=self.cfg.dataloader_workers,
-            collate_fn=self.processor,
-            prefetch_factor=2
+            collate_fn=self.processor
         )
 
     def hook_after_setup(self):
