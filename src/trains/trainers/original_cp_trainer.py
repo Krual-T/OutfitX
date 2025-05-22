@@ -147,7 +147,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                 with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
                     input_dict = batch_dict['cp_input_dict']
                     input_dict['outfit_embedding'] = self.model.module.item_encoder(
-                        **batch_dict['encoder_input_dict']
+                        **self.encoder_dict_to_device(batch_dict['encoder_input_dict'])
                     )
                     input_dict = {
                         k: (v if k == 'task' else v.to(self.local_rank))
@@ -219,7 +219,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
                 input_dict = batch_dict['cp_input_dict']
                 input_dict['outfit_embedding'] = self.model.module.item_encoder(
-                    **batch_dict['encoder_input_dict']
+                    **self.encoder_dict_to_device(batch_dict['encoder_input_dict'])
                 )
                 input_dict = {
                     k: (v if k == 'task' else v.to(self.local_rank))
