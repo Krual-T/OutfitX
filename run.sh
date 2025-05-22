@@ -10,7 +10,7 @@ fi
 # 🎯 参数解析
 TASK_NAME="$1"
 MODE="${2:-train-valid}"  # 第二个参数可选，默认是 train-valid
-
+CARD="${3:-1}"                 # 第三个参数：卡数，默认 1
 # 📅 构造分支名（按当天日期）
 DATE_STR=$(date +%F)
 BRANCH_NAME="tangshaokun/$DATE_STR"
@@ -28,4 +28,4 @@ git reset --hard origin/$BRANCH_NAME || {
 echo "✅ 分支切换成功：$BRANCH_NAME"
 # 🚀 启动训练任务
 echo "🚀 正在运行任务：$TASK_NAME，模式：$MODE"
-torchrun --standalone --nproc_per_node=4 ./src/trains/run/${TASK_NAME}.py --mode=${MODE}
+torchrun --standalone --nproc_per_node=$CARD ./src/trains/run/${TASK_NAME}.py --mode=${MODE}
