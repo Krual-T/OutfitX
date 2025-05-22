@@ -29,7 +29,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                 batch_size=400,
                 broadcast_buffers=False,
                 accumulation_steps= 10,
-                dataloader_workers=10
+                dataloader_workers=8
             )
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.cfg = cast(CompatibilityPredictionTrainConfig, cfg)
