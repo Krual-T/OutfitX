@@ -632,10 +632,10 @@ class DistributedTrainer(ABC):
         self.local_rank = int(os.environ["LOCAL_RANK"])
         self.rank = int(os.environ["RANK"])
         self.world_size = int(os.environ["WORLD_SIZE"])
-        self.cfg.dataloader_workers = min(
-            self.cfg.dataloader_workers,
-            max(1, (os.cpu_count() // max(1,torch.cuda.device_count()))-1)
-        )
+        # self.cfg.dataloader_workers = min(
+        #     self.cfg.dataloader_workers,
+        #     max(1, (os.cpu_count() // max(1,torch.cuda.device_count()))-1)
+        # )
         self.setup()
 
         return self
