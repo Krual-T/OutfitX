@@ -504,6 +504,8 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
     #     }
 
     def maybe_save_best_models(self, metrics: dict, epoch: int):
+        if self.rank != 0:
+            return
         for metric,metric_value in metrics.items():
             if metric !='AUC' and metric!='loss':
                 continue
