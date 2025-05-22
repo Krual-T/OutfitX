@@ -284,7 +284,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             pin_memory=True,
             persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=self.processor,
-            prefetch_factor=2,
+            prefetch_factor=1,
         )
 
         self.valid_dataloader = DataLoader(
@@ -296,7 +296,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             pin_memory=True,
             persistent_workers=True if self.cfg.dataloader_workers > 0 else False,
             collate_fn=self.processor,
-            prefetch_factor=2,
+            prefetch_factor=1,
         )
 
     def setup_test_dataloader(self):
