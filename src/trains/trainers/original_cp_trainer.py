@@ -86,7 +86,6 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
                     self.scaler.update()
                     self.optimizer.zero_grad()
                     self.scheduler.step()
-                    torch.cuda.empty_cache()
             if self.world_size > 1:
                 dist.barrier()
             # metrics = self.build_metrics(
