@@ -63,27 +63,26 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         local_y_hats = []
         local_labels = []
         for step,batch_dict in enumerate(train_processor):
-            with self.safe_process_context(epoch=epoch):
-                with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
-                    input_dict = {
-                        k: (v if k == 'task' or k=='outfit_embedding' or k=='encoder_input_dict' else v.to(self.local_rank))
-                        for k, v in batch_dict['input_dict'].items()
-                    }
-                    y_hats = self.model(**input_dict).squeeze(dim=-1)
-                    labels = batch_dict['label'].to(self.local_rank)
-                    loss = self.loss(y_hat=y_hats, y_true=labels)
-                    original_loss = loss.clone().detach()
-                    loss = loss / self.cfg.accumulation_steps
+            with autocast(enabled=self.cfg.use_amp, device_type=self.device_type):
+                input_dict = {
+                    k: (v if k == 'task' or k=='outfit_embedding' or k=='encoder_input_dict' else v.to(self.local_rank))
+                    for k, v in batch_dict['input_dict'].items()
+                }
+                y_hats = self.model(**input_dict).squeeze(dim=-1)
+                labels = batch_dict['label'].to(self.local_rank)
+                loss = self.loss(y_hat=y_hats, y_true=labels)
+                original_loss = loss.clone().detach()
+                loss = loss / self.cfg.accumulation_steps
 
-                self.scaler.scale(loss).backward()
-                update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step+1) == len(self.train_dataloader))
-                if update_grad:
-                    self.scaler.unscale_(self.optimizer)
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                    self.optimizer.zero_grad()
-                    self.scheduler.step()
+            self.scaler.scale(loss).backward()
+            update_grad = ((step + 1) % self.cfg.accumulation_steps == 0) or ((step+1) == len(self.train_dataloader))
+            if update_grad:
+                self.scaler.unscale_(self.optimizer)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                self.optimizer.zero_grad()
+                self.scheduler.step()
             # if self.world_size > 1:
             #     dist.barrier()
             # metrics = self.build_metrics(
@@ -143,16 +142,15 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         local_y_hats = []
         local_labels = []
         for step,batch_dict in enumerate(valid_processor):
-            with self.safe_process_context(epoch=epoch):
-                with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
-                    input_dict = {
-                        k: (v if k == 'task' or k=='outfit_embedding' or k=='encoder_input_dict' else v.to(self.local_rank))
-                        for k, v in batch_dict['input_dict'].items()
-                    }
-                    y_hats = self.model(**input_dict).squeeze(dim=-1)
-                    labels = batch_dict['label'].to(self.local_rank)
-                    loss = self.loss(y_hat=y_hats, y_true=labels)
-                    original_loss = loss.clone().detach()
+            with autocast(device_type=self.device_type, enabled=self.cfg.use_amp):
+                input_dict = {
+                    k: (v if k == 'task' or k=='outfit_embedding' or k=='encoder_input_dict' else v.to(self.local_rank))
+                    for k, v in batch_dict['input_dict'].items()
+                }
+                y_hats = self.model(**input_dict).squeeze(dim=-1)
+                labels = batch_dict['label'].to(self.local_rank)
+                loss = self.loss(y_hat=y_hats, y_true=labels)
+                original_loss = loss.clone().detach()
             # metrics = self.build_metrics(
             #         local_y_hats=y_hats.detach(),
             #         local_labels=labels.detach(),
