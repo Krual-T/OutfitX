@@ -136,7 +136,7 @@ class OutfitTransformer(nn.Module):
             src_key_padding_mask=mask
         ).contiguous()
         # 取出outfit_token的输出
-        outfit_token_states = transformer_outputs[:, 0, :] # [B, d_embed]
+        outfit_token_states = transformer_outputs[:, 0, :].contiguous() # [B, d_embed]
         scores = self.cp_ffn(outfit_token_states) # [B, 1]
         return scores
 
@@ -164,7 +164,7 @@ class OutfitTransformer(nn.Module):
             src_key_padding_mask=mask
         ).contiguous()
         # 取出target_item_token的输出
-        target_item_token_states = transformer_outputs[:, 0, :] # [B, d_embed]
+        target_item_token_states = transformer_outputs[:, 0, :].contiguous() # [B, d_embed]
         target_item_embeddings = self.cir_ffn(target_item_token_states) # [B, d_embed]
         return target_item_embeddings
 
