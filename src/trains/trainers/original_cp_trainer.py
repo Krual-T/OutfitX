@@ -543,7 +543,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         self.loss:Union[FocalLoss,None] = None
         self.device_type = None
         self.model_cfg = OutfitTransformerConfig()
-        self.model_cfg.item_encoder.type = 'resnet_hf_sentence_bert'
+        self.model_cfg.model_name = 'all-MiniLM-L6-v2'
         self.processor = OutfitTransformerProcessorFactory.get_processor(
             task=OutfitCompatibilityPredictionTask,
             cfg=self.model_cfg
