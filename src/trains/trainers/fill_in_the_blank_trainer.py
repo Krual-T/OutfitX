@@ -55,7 +55,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
             total += y_hats_index.size(0)
             correct += (y_hats_index == y_index).sum().item()
         metrics = {
-            'Accuracy/test': float(correct / total)*0.875
+            'Accuracy/test': float(correct / total)
         }
         self.log(
             level='info',
