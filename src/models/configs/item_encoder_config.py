@@ -24,4 +24,6 @@ class ItemEncoderConfig:
         elif self.type =='slip':
             self.slip_model_name: str = "hf-hub:Marqo/marqo-fashionSigLIP"
             dim_per_modality_embed = 768
+        else:
+            raise ValueError(f"Unsupported type: {self.type}")
         self.dim_per_modality:int = dim_per_modality_embed
