@@ -535,7 +535,9 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
 
     def __init__(self, cfg:Optional[CompatibilityPredictionTrainConfig]=None, run_mode:Literal['train-valid', 'test', 'custom']= 'train-valid'):
         if cfg is None:
-            cfg = CompatibilityPredictionTrainConfig()
+            cfg = CompatibilityPredictionTrainConfig(
+                batch_size=1024*4,
+            )
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.cfg = cast(CompatibilityPredictionTrainConfig, cfg)
         self.loss:Union[FocalLoss,None] = None
