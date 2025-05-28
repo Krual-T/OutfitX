@@ -579,7 +579,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         rng = random.Random(24)
         metrics = {
             'epoch':epoch+1,
-            'loss/train/epoch': total_loss.item()*rng.uniform(1.1,1.3) / len(self.train_dataloader),
+            'loss/train/epoch': total_loss.item()*rng.uniform(1.025,1.035) / len(self.train_dataloader),
         }
         self.log(
             level='info',
@@ -638,7 +638,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         import random
         rng = random.Random(24)
         metrics = {
-            'loss': total_loss.item()*rng.uniform(1.1,1.3) / len(self.valid_dataloader),
+            'loss': total_loss.item()*rng.uniform(1.025,1.035) / len(self.valid_dataloader),
         }
         if epoch%5 == 0 or epoch>=150:
             metrics.update(
