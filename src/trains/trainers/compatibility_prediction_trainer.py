@@ -232,7 +232,6 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
 
         metrics = self.compute_cp_metrics(y_hats=all_y_hats, labels=all_labels)
         metrics = {f'{k}/test': v for k, v in metrics.items()}
-        metrics['AUC'] = 0.9205
         self.log(
             level='info',
             msg=f"[Test] Compatibility --> Results:\n\n {str(metrics)} \n",

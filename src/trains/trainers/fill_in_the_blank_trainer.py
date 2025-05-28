@@ -25,6 +25,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
         self.cfg = cast(FillInTheBlankTrainConfig, cfg)
         self.device_type = None
         self.model_cfg = OutfitTransformerConfig()
+        self.model_cfg.model_name = 'all-MiniLM-L6-v2'
         if self.run_mode == 'train-valid':
             raise ValueError("为实现")
         elif self.run_mode == 'test':

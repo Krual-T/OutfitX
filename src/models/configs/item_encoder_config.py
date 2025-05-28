@@ -6,7 +6,7 @@ from typing import Literal
 class ItemEncoderConfig:
     # Contrastive Language-Image Pre-Training (CLIP) 对比语言-图像预训练模型
     #  Sigmoid loss for Language-Image Pre-training (SigLIP)
-    type: Literal['clip', 'resnet_hf_sentence_bert', 'slip'] = 'clip'
+    type: Literal['clip', 'resnet_hf_sentence_bert', 'slip'] = 'slip'
 
     norm_out: bool = True
     # 定义聚合方法，可选值为 'concat' 、 'sum' 或 'mean'，默认为 'concat'
@@ -24,4 +24,6 @@ class ItemEncoderConfig:
         elif self.type =='slip':
             self.slip_model_name: str = "hf-hub:Marqo/marqo-fashionSigLIP"
             dim_per_modality_embed = 768
+        else:
+            raise ValueError(f"Unsupported type: {self.type}")
         self.dim_per_modality:int = dim_per_modality_embed

@@ -36,6 +36,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         self.loss:Union[FocalLoss,None] = None
         self.device_type = None
         self.model_cfg = OutfitTransformerConfig()
+        self.model_cfg.item_encoder.type = 'resnet_hf_sentence_bert'
         self.processor = OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(self.model_cfg)
         self.best_metrics = {
             'AUC': 0.0,
