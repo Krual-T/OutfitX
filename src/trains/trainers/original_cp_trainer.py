@@ -1013,7 +1013,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
             best = self.best_metrics.get(metric, sign * np.inf)
             if metric_value * sign < best * sign:
                 self.best_metrics[metric] = metric_value
-                ckpt_name = f"{self.model_cfg.model_name}_{metric}"
+                ckpt_name = f"{self.model_cfg.model_name}_best_{metric}"
                 self.save_checkpoint(ckpt_name=ckpt_name,epoch=epoch, model_cfg_dict=self.model_cfg.__dict__)
                 self.log(
                     level='info',
