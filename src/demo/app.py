@@ -2,7 +2,7 @@
 
 import pickle
 import random
-
+import base64
 import numpy as np
 import torch
 from pathlib import Path
@@ -210,9 +210,13 @@ with gr.Blocks(css=css) as demo:
                     f"<p><strong>标签：{item['label']} ｜ 兼容性分数：{item['prob']:.3f}</strong></p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
+                # 👇 这里改为 Base64 内联
                 for path in item["paths"]:
+                    img_bytes = Path(path).read_bytes()
+                    b64 = base64.b64encode(img_bytes).decode('utf-8')
+                    # data URI：前缀根据你的图类型（jpg/png）
                     html += (
-                        f"<img src='file={path}' "
+                        f"<img src='data:image/jpeg;base64,{b64}' "
                         "style='display:inline-block; margin-right:8px;' />"
                     )
                 html += "</div></div>"
@@ -222,4 +226,8 @@ with gr.Blocks(css=css) as demo:
         btn.click(fn=full_pipeline, outputs=html_output)
 
 if __name__ == "__main__":
-    demo.launch(server_port=6006,allowed_paths=[str(ROOT_DIR / 'datasets' / 'polyvore' / 'images')])
+    demo.launch(
+        server_port=6006,
+        allowed_paths=[str(ROOT_DIR / 'datasets' / 'polyvore' / 'images')],
+        static_dirs=[str(ROOT_DIR / 'datasets' / 'polyvore' / 'images')]
+    )
