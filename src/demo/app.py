@@ -117,23 +117,27 @@ def load_task(task_name: str):
 # ---------- 推理函数 ----------
 def run_cp_demo(model, dataset, processor, batch_size: int = 10):
     model.eval()
-    samples_index = random.sample(range(0, len(dataset)), batch_size)
+    samples_index = random.sample(range(len(dataset)), batch_size)
     raws = [dataset[i] for i in samples_index]
     batch = processor(raws)
 
-    inp = {k: (v if k == 'task' else v.to(DEVICE)) for k, v in batch['input_dict'].items()}
+    inp = {k: (v if k=='task' else v.to(DEVICE)) for k,v in batch['input_dict'].items()}
     with torch.no_grad(), autocast(device_type=DEVICE.type, enabled=False):
         logits = model(**inp).squeeze(-1).cpu().numpy()
-
     probs = 1 / (1 + np.exp(-logits))
 
     results = []
     dataset_dir = dataset.dataset_dir
     for i, (query, label) in enumerate(raws):
+        # 🚀 只存路径，不 open
+        paths = [
+            str(dataset_dir / 'images' / f'{item.item_id}.jpg')
+            for item in query.outfit
+        ]
         results.append({
             "label": label,
             "prob": float(probs[i]),
-            "images": [Image.open(dataset_dir / 'images' / f'{item.item_id}.jpg').convert("RGB") for item in query.outfit]
+            "paths": paths,   # 用 paths 字段
         })
     return results
 
@@ -192,34 +196,30 @@ with gr.Blocks(css=css) as demo:
     gr.Markdown(
         "<h1 style='text-align:center;'>🌟 基于CNN-Transformer跨模态融合的穿搭推荐模型研究可视化展板</h1>"
     )
+    with gr.TabItem("服装兼容性预测（CP）"):
+        btn = gr.Button("生成 CP 示例 🚀")
+        html_output = gr.HTML()
 
-    with gr.Tabs():
-        with gr.TabItem("服装兼容性预测（CP）"):
-            btn = gr.Button("生成 CP 示例 🚀")
-            html_output = gr.HTML()  # 用 HTML 容器展示
 
-            def full_pipeline():
-                results = run_cp_demo(*load_task("CP"), batch_size=CP_PAGE_SIZE)
-                html = ""
-                for item in results:
-                    # 1) 每组一行：标签 + 分数
+        def full_pipeline():
+            results = run_cp_demo(*load_task("CP"), batch_size=CP_PAGE_SIZE)
+            html = ""
+            for item in results:
+                html += (
+                    "<div style='margin-bottom:16px;'>"
+                    f"<p><strong>标签：{item['label']} ｜ 兼容性分数：{item['prob']:.3f}</strong></p>"
+                    "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
+                )
+                for path in item["paths"]:
                     html += (
-                        "<div style='margin-bottom:16px;'>"
-                        f"<p><strong>标签：{item['label']} ｜ 兼容性分数：{item['prob']:.3f}</strong></p>"
-                        # 2) 横向滚动容器
-                        "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
+                        f"<img src='file={path}' "
+                        "style='display:inline-block; margin-right:8px;' />"
                     )
-                    # 3) 原图引用，无缩放
-                    for img in item["images"]:
-                        # img.filename 存的就是本地文件路径！
-                        html += (
-                            f"<img src='file={img.filename}' "
-                            "style='display:inline-block; margin-right:8px;' />"
-                        )
-                    html += "</div></div>"
-                return html
+                html += "</div></div>"
+            return html
 
-            btn.click(fn=full_pipeline, outputs=html_output)
+
+        btn.click(fn=full_pipeline, outputs=html_output)
 
 if __name__ == "__main__":
     demo.launch(server_port=6006)
