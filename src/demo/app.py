@@ -139,14 +139,14 @@ def run_cp_demo(model, dataset, processor, batch_size: int = 10):
 
 # ---------- 展示函数 ----------
 def display_cp_demo(results):
-    with gr.Column() as block:
-        for item in results:
-            gr.Markdown(f"**标签：{item['label']}｜兼容性分数：{item['prob']:.3f}**")
-            with gr.Row(elem_id="scroll-row"):
-                for img in item["images"]:
-                    with gr.Column():
-                        gr.Image(value=img, type="pil", show_label=False)
-    return block
+    components = []
+    for item in results:
+        components.append(gr.Markdown(f"**标签：{item['label']}｜兼容性分数：{item['prob']:.3f}**"))
+        with gr.Row() as row:
+            for img in item["images"]:
+                row.append(gr.Image(value=img, type="pil", show_label=False))
+            components.append(row)
+    return components
 
 # ---------- CSS 样式 ----------
 css = """
@@ -185,16 +185,20 @@ css = """
 """
 # ─── Gradio 布局 ──────────────────────────────
 with gr.Blocks(css = css) as demo:
-    gr.Markdown("# 🌟 基于CNN-Transformer跨模态融合的穿搭推荐模型研究可视化展板")
+    gr.Markdown("<h1 style='text-align:center;'>🌟 基于CNN-Transformer跨模态融合的穿搭推荐模型研究可视化展板</h1>")
 
     with gr.Tabs():
         with gr.TabItem("服装兼容性预测（CP）"):
             btn = gr.Button("生成 CP 示例")
-            result_area = gr.Column()
+            result_area = gr.Column()  # 容器
+
             def full_pipeline():
                 results = run_cp_demo(*load_task("CP"))
+                # 👇 display_cp_demo returns [Markdown, Row, Row, ...]
                 return display_cp_demo(results)
-            btn.click(fn=full_pipeline, outputs=result_area)
+
+            # ✅ 注意 outputs=[result_area] 写法
+            btn.click(fn=full_pipeline, outputs=[result_area])
 
 
 
