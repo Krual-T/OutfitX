@@ -39,18 +39,18 @@ cfg_model = OutfitTransformerConfig()
 
 # checkpoint 根目录（../checkpoints/{polyvore_type}/{task}/）
 CKPT_ROOT = Path(cfg_cp.checkpoint_dir).parent
-
+precomputed_embedding_dir = ROOT_DIR / 'datasets' / 'polyvore' / 'precomputed_embeddings'
 # 每页样本数
 CP_PAGE_SIZE   = 10
 CIR_PAGE_SIZE  = 10
 FITB_PAGE_SIZE = 1
 
 # ─── 预加载全库 Embedding Pool（用于 CIR & FITB） ────────
-def load_embeddings(self, embed_file_prefix: str = "embedding_subset_") -> dict:
+def load_embeddings(embed_file_prefix: str = "embedding_subset_") -> dict:
     """
     合并所有 embedding_subset_{rank}.pkl 文件，返回包含完整 id 列表和嵌入矩阵的 dict。
     """
-    embedding_dir = self.cfg.precomputed_embedding_dir
+    embedding_dir = precomputed_embedding_dir
     prefix = embed_file_prefix
     files = sorted(embedding_dir.glob(f"{prefix}*.pkl"))
     if not files:
