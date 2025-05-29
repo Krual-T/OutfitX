@@ -207,7 +207,7 @@ with gr.Blocks(css=css) as demo:
             for item in results:
                 html += (
                     "<div style='margin-bottom:16px;'>"
-                    f"<p><strong>标签：{item['label']} ｜ 兼容性分数：{item['prob']:.3f}</strong></p>"
+                    f"<p style='font-size:24px;'><strong>标签：{item['label']} ｜ 兼容性分数：{item['prob']:.3f}</strong></p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 # 👇 这里改为 Base64 内联
