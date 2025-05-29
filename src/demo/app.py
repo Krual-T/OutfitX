@@ -142,10 +142,14 @@ def display_cp_demo(results):
     components = []
     for item in results:
         components.append(gr.Markdown(f"**标签：{item['label']}｜兼容性分数：{item['prob']:.3f}**"))
-        with gr.Row() as row:
-            for img in item["images"]:
-                row.append(gr.Image(value=img, type="pil", show_label=False))
-            components.append(row)
+
+        imgs = [
+            gr.Image(value=img, type="pil", show_label=False)
+            for img in item["images"]
+        ]
+        row = gr.Row(components=imgs)
+        components.append(row)
+
     return components
 
 # ---------- CSS 样式 ----------
