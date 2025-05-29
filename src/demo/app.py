@@ -66,15 +66,15 @@ def load_task(task_name: str):
     emb_dict = None
     model = OutfitTransformer(cfg_model)
     if task_name == "CP":
-        ckpt = CKPT_ROOT/ cfg_cp.polyvore_type /"compatibility_prediction"/f"{cfg_model.model_name}_best_AUC.pth"
+        ckpt = CKPT_ROOT/ "compatibility_prediction"/f"{cfg_model.model_name}_best_AUC.pth"
         dataset_cls = PolyvoreCompatibilityPredictionDataset
         task = OutfitCompatibilityPredictionTask
     elif task_name == "CIR":
-        ckpt = CKPT_ROOT/ cfg_cir.polyvore_type /"complementary_item_retrieval"/f"{cfg_model.model_name}_best_Recall@1.pth"
+        ckpt = CKPT_ROOT/ "complementary_item_retrieval"/f"{cfg_model.model_name}_best_Recall@1.pth"
         dataset_cls = PolyvoreComplementaryItemRetrievalDataset
         task = OutfitComplementaryItemRetrievalTask
     elif task_name == "FITB":
-        ckpt = CKPT_ROOT/ cfg_fitb.polyvore_type /"fill_in_the_blank"/f"{cfg_model.model_name}_best_Recall@1.pth"
+        ckpt = CKPT_ROOT/ "fill_in_the_blank"/f"{cfg_model.model_name}_best_Recall@1.pth"
         dataset_cls = PolyvoreFillInTheBlankDataset
         task = OutfitFillInTheBlankTask
     else:
