@@ -197,37 +197,38 @@ with gr.Blocks(css=css) as demo:
         with gr.TabItem("服装兼容性预测（CP）"):
             btn = gr.Button("生成 CP 示例 🚀")
 
-            # 文本区域：显示多组标签+分数
-            text_output = gr.Markdown()
-
-            # 图片画廊：每个子列表按行渲染
-            gallery = gr.Gallery(
-                label="Outfits",
-                elem_id="cp-gallery",
-                show_label=False,
-                # rows=batch_size, columns=最大单行图片数（可按需改）
-                rows=CP_PAGE_SIZE, columns=CP_PAGE_SIZE
-            )
-
+            # 为 batch_size 行预置占位：先放 5 行 Markdown，再放 5 个 Gallery
+            md_outputs = [gr.Markdown(visible=False) for _ in range(CP_PAGE_SIZE)]
+            gal_outputs = [
+                gr.Gallery(
+                    show_label=False,
+                    elem_id=f"cp-outfit-{i}",
+                    col_count=10,  # 每行至多 10 张图
+                    visible=False
+                )
+                for i in range(CP_PAGE_SIZE)
+            ]
 
             def full_pipeline():
-                results = run_cp_demo(*load_task("CP"))
-                # 构造 Markdown 文本
-                md = ""
-                for i, item in enumerate(results, 1):
-                    md += f"**{i}. 标签：{item['label']}  ｜ 兼容性分数：{item['prob']:.3f}**\n\n"
-                # 扁平化所有图片，Gallery 需要 (img, caption) 的二元组
-                flat_imgs = [
-                    (img, "")
-                    for item in results
-                    for img in item["images"]
-                ]
-                return md, flat_imgs
+                results = run_cp_demo(*load_task("CP"), batch_size=CP_PAGE_SIZE)
+                md_list, img_list = [], []
+                for idx, item in enumerate(results):
+                    # Markdown 填文本，并设为可见
+                    md_list.append(f"**{idx+1}. 标签：{item['label']}  ｜ 兼容性分数：{item['prob']:.3f}**")
+                    # Gallery 需要扁平 (img, caption) 对列表
+                    imgs = [(img, "") for img in item["images"]]
+                    img_list.append(imgs)
+                # 若结果少于 CP_PAGE_SIZE，其余行清空隐藏
+                for _ in range(len(results), CP_PAGE_SIZE):
+                    md_list.append("")
+                    img_list.append([])
+                return md_list + img_list
 
-
-            btn.click(fn=full_pipeline, outputs=[text_output, gallery])
-
-            btn.click(fn=full_pipeline, outputs=[text_output, gallery])
+            # outputs 顺序要和 return 一致：先所有 Markdown，再所有 Gallery
+            btn.click(
+                fn=full_pipeline,
+                outputs=md_outputs + gal_outputs
+            )
 
 
 
