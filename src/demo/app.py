@@ -187,7 +187,7 @@ css = """
     flex: 0 0 auto;
 }
 """
-# ─── Gradio 布局 ──────────────────────────────
+# ─── 在 Blocks 定义里，用一个 HTML 输出区域 ─────────────────
 with gr.Blocks(css=css) as demo:
     gr.Markdown(
         "<h1 style='text-align:center;'>🌟 基于CNN-Transformer跨模态融合的穿搭推荐模型研究可视化展板</h1>"
@@ -196,38 +196,30 @@ with gr.Blocks(css=css) as demo:
     with gr.Tabs():
         with gr.TabItem("服装兼容性预测（CP）"):
             btn = gr.Button("生成 CP 示例 🚀")
-
-            # 预置 5 行：每行一个 Row，Row 里两个组件（Markdown, Gallery）
-            text_outputs = []
-            gal_outputs  = []
-            for i in range(CP_PAGE_SIZE):
-                with gr.Row():
-                    md = gr.Markdown("", visible=False)
-                    gallery = gr.Gallery(
-                        show_label=False,
-                        columns=10,       # 每行最多十张图
-                        visible=False
-                    )
-                text_outputs.append(md)
-                gal_outputs.append(gallery)
+            html_output = gr.HTML()  # 用 HTML 容器展示
 
             def full_pipeline():
                 results = run_cp_demo(*load_task("CP"), batch_size=CP_PAGE_SIZE)
-                outs = []
-                # 遍历每一行
-                for idx in range(CP_PAGE_SIZE):
-                    if idx < len(results):
-                        item = results[idx]
-                        txt = f"**{idx+1}. 标签：{item['label']}  ｜ 兼容性分数：{item['prob']:.3f}**"
-                        imgs = [(img, "") for img in item["images"]]
-                    else:
-                        txt, imgs = "", []
-                    outs.append(txt)    # 先填 Markdown
-                    outs.append(imgs)   # 再填 Gallery
-                return outs
+                html = ""
+                for item in results:
+                    # 1) 每组一行：标签 + 分数
+                    html += (
+                        "<div style='margin-bottom:16px;'>"
+                        f"<p><strong>标签：{item['label']} ｜ 兼容性分数：{item['prob']:.3f}</strong></p>"
+                        # 2) 横向滚动容器
+                        "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
+                    )
+                    # 3) 原图引用，无缩放
+                    for img in item["images"]:
+                        # img.filename 存的就是本地文件路径！
+                        html += (
+                            f"<img src='file={img.filename}' "
+                            "style='display:inline-block; margin-right:8px;' />"
+                        )
+                    html += "</div></div>"
+                return html
 
-            # outputs 顺序要和 full_pipeline 返回一致：先 5 个 Markdown，再 5 个 Gallery
-            btn.click(fn=full_pipeline, outputs=text_outputs + gal_outputs)
+            btn.click(fn=full_pipeline, outputs=html_output)
 
 if __name__ == "__main__":
     demo.launch(server_port=6006)
