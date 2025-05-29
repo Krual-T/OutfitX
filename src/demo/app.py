@@ -188,21 +188,38 @@ css = """
 }
 """
 # ─── Gradio 布局 ──────────────────────────────
-with gr.Blocks(css = css) as demo:
-    gr.Markdown("<h1 style='text-align:center;'>🌟 基于CNN-Transformer跨模态融合的穿搭推荐模型研究可视化展板</h1>")
+with gr.Blocks(css=css) as demo:
+    gr.Markdown(
+        "<h1 style='text-align:center;'>🌟 基于CNN-Transformer跨模态融合的穿搭推荐模型研究可视化展板</h1>"
+    )
 
     with gr.Tabs():
         with gr.TabItem("服装兼容性预测（CP）"):
-            btn = gr.Button("生成 CP 示例")
-            result_area = gr.Column()  # 容器
+            btn = gr.Button("生成 CP 示例 🚀")
+
+            # 文本区域：显示多组标签+分数
+            text_output = gr.Markdown()
+
+            # 图片画廊：每个子列表按行渲染
+            gallery = gr.Gallery(
+                label="Outfits",
+                elem_id="cp-gallery",
+                show_label=False,
+                # rows=batch_size, columns=最大单行图片数（可按需改）
+                rows=CP_PAGE_SIZE, columns=CP_PAGE_SIZE
+            )
 
             def full_pipeline():
                 results = run_cp_demo(*load_task("CP"))
-                # 👇 display_cp_demo returns [Markdown, Row, Row, ...]
-                return display_cp_demo(results)
+                # 1) 构造 Markdown 文本：每组一个段落
+                md = ""
+                for i, item in enumerate(results, 1):
+                    md += f"**{i}. 标签：{item['label']}  ｜ 兼容性分数：{item['prob']:.3f}**\n\n"
+                # 2) 构造嵌套列表：每个 sublist 是一行 outfit 图像
+                nested_imgs = [item["images"] for item in results]
+                return md, nested_imgs
 
-            # ✅ 注意 outputs=[result_area] 写法
-            btn.click(fn=full_pipeline, outputs=[result_area])
+            btn.click(fn=full_pipeline, outputs=[text_output, gallery])
 
 
 
