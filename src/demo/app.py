@@ -209,15 +209,23 @@ with gr.Blocks(css=css) as demo:
                 rows=CP_PAGE_SIZE, columns=CP_PAGE_SIZE
             )
 
+
             def full_pipeline():
                 results = run_cp_demo(*load_task("CP"))
-                # 1) 构造 Markdown 文本：每组一个段落
+                # 构造 Markdown 文本
                 md = ""
                 for i, item in enumerate(results, 1):
                     md += f"**{i}. 标签：{item['label']}  ｜ 兼容性分数：{item['prob']:.3f}**\n\n"
-                # 2) 构造嵌套列表：每个 sublist 是一行 outfit 图像
-                nested_imgs = [item["images"] for item in results]
-                return md, nested_imgs
+                # 扁平化所有图片，Gallery 需要 (img, caption) 的二元组
+                flat_imgs = [
+                    (img, "")
+                    for item in results
+                    for img in item["images"]
+                ]
+                return md, flat_imgs
+
+
+            btn.click(fn=full_pipeline, outputs=[text_output, gallery])
 
             btn.click(fn=full_pipeline, outputs=[text_output, gallery])
 
