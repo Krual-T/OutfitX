@@ -3,6 +3,8 @@
 import pickle
 import random
 import base64
+from collections import defaultdict
+
 import numpy as np
 import torch
 from pathlib import Path
@@ -178,6 +180,57 @@ css = """
 """
 
 # ─── CIR 分页渲染 (torch.topk + GPU) ──────────
+def run_cir_demo(model, dataset, processor, batch_size: int = 10):
+    model.eval()
+    samples_index = random.sample(range(len(dataset)), batch_size)
+    raws = [dataset[i] for i in samples_index]
+    batch = processor(raws)
+    inp = {k: (v if k=='task' else v.to(DEVICE)) for k,v in batch['input_dict'].items()}
+    with torch.no_grad(), autocast(device_type=DEVICE.type, enabled=False):
+        y_hats = model(**inp)
+    pos_items_id = batch['pos_item_id']
+    candidate_pools = dataset.candidate_pools
+    category_to_queries = defaultdict(list)
+    category_to_gt = defaultdict(list)
+
+    for i, item_id in enumerate(pos_items_id):
+        c_id = dataset.metadata[item_id]['category_id']
+        category_to_queries[c_id].append(y_hats[i].cpu())
+        category_to_gt[c_id].append(candidate_pools[c_id]['index'][item_id])
+
+    max_length = max(len(queries) for queries in category_to_queries.values())
+
+    category_to_queries_padded = []
+    candidate_tensors = []
+    gt_padded = []
+    mask = []
+    for c_id, queries in category_to_queries.items():
+        qs_tensor = torch.stack(queries, dim=0)
+        q_length = qs_tensor.shape[0]
+        category_to_queries_padded.append(
+            torch.nn.functional.pad(
+                qs_tensor,
+                (0, 0, 0, max_length - q_length),
+                value=0
+            ).to(DEVICE)
+        )
+        candidate_tensors.append(
+            candidate_pools[c_id]['embeddings'].clone().detach().to(DEVICE)
+        )
+        gt_padded.append(
+            category_to_gt[c_id] + [-1] * (max_length - q_length)
+        )
+        mask.append([1] * q_length + [0] * (max_length - q_length))
+
+    category_to_queries_tensor_padded = torch.stack(category_to_queries_padded, dim=0)
+    candidate_tensors = torch.stack(candidate_tensors, dim=0)
+    gt_index_tensor = torch.tensor(gt_padded, dtype=torch.long, device=DEVICE)  # after padded [C, max_len]
+    mask_tensor = torch.tensor(mask, dtype=torch.bool, device=DEVICE)  # [C, max_len]
+
+    with autocast(enabled=True, device_type=DEVICE):
+        dists = torch.cdist(category_to_queries_tensor_padded, candidate_tensors)  # [C, max_len, 3000]
+    top_k_index = torch.topk(dists, k=10, largest=False).indices  # [C, max_len, K] k 个 index
+
 
 # ─── FITB 分页渲染 ───────────────────────────
 
@@ -199,8 +252,6 @@ with gr.Blocks(css=css) as demo:
     with gr.TabItem("服装兼容性预测（CP）"):
         btn = gr.Button("生成 CP 示例 🚀")
         html_output = gr.HTML()
-
-
         def full_pipeline():
             results = run_cp_demo(*load_task("CP"), batch_size=CP_PAGE_SIZE)
             html = ""
@@ -221,9 +272,10 @@ with gr.Blocks(css=css) as demo:
                     )
                 html += "</div></div>"
             return html
-
-
         btn.click(fn=full_pipeline, outputs=html_output)
+
+    with gr.TabItem("服装互补单品检索（CIR）"):
+        pass
 
 if __name__ == "__main__":
     demo.launch(
