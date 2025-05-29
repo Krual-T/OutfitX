@@ -197,40 +197,37 @@ with gr.Blocks(css=css) as demo:
         with gr.TabItem("服装兼容性预测（CP）"):
             btn = gr.Button("生成 CP 示例 🚀")
 
-            # 为 batch_size 行预置占位：先放 5 行 Markdown，再放 5 个 Gallery
-            md_outputs = [gr.Markdown(visible=False) for _ in range(CP_PAGE_SIZE)]
-            gal_outputs = [
-                gr.Gallery(
-                    show_label=False,
-                    elem_id=f"cp-outfit-{i}",
-                    col_count=10,  # 每行至多 10 张图
-                    visible=False
-                )
-                for i in range(CP_PAGE_SIZE)
-            ]
+            # 预置 5 行：每行一个 Row，Row 里两个组件（Markdown, Gallery）
+            text_outputs = []
+            gal_outputs  = []
+            for i in range(CP_PAGE_SIZE):
+                with gr.Row():
+                    md = gr.Markdown("", visible=False)
+                    gallery = gr.Gallery(
+                        show_label=False,
+                        columns=10,       # 每行最多十张图
+                        visible=False
+                    )
+                text_outputs.append(md)
+                gal_outputs.append(gallery)
 
             def full_pipeline():
                 results = run_cp_demo(*load_task("CP"), batch_size=CP_PAGE_SIZE)
-                md_list, img_list = [], []
-                for idx, item in enumerate(results):
-                    # Markdown 填文本，并设为可见
-                    md_list.append(f"**{idx+1}. 标签：{item['label']}  ｜ 兼容性分数：{item['prob']:.3f}**")
-                    # Gallery 需要扁平 (img, caption) 对列表
-                    imgs = [(img, "") for img in item["images"]]
-                    img_list.append(imgs)
-                # 若结果少于 CP_PAGE_SIZE，其余行清空隐藏
-                for _ in range(len(results), CP_PAGE_SIZE):
-                    md_list.append("")
-                    img_list.append([])
-                return md_list + img_list
+                outs = []
+                # 遍历每一行
+                for idx in range(CP_PAGE_SIZE):
+                    if idx < len(results):
+                        item = results[idx]
+                        txt = f"**{idx+1}. 标签：{item['label']}  ｜ 兼容性分数：{item['prob']:.3f}**"
+                        imgs = [(img, "") for img in item["images"]]
+                    else:
+                        txt, imgs = "", []
+                    outs.append(txt)    # 先填 Markdown
+                    outs.append(imgs)   # 再填 Gallery
+                return outs
 
-            # outputs 顺序要和 return 一致：先所有 Markdown，再所有 Gallery
-            btn.click(
-                fn=full_pipeline,
-                outputs=md_outputs + gal_outputs
-            )
-
-
+            # outputs 顺序要和 full_pipeline 返回一致：先 5 个 Markdown，再 5 个 Gallery
+            btn.click(fn=full_pipeline, outputs=text_outputs + gal_outputs)
 
 if __name__ == "__main__":
     demo.launch(server_port=6006)
