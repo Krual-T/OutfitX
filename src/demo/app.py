@@ -128,11 +128,12 @@ def run_cp_demo(model, dataset, processor, batch_size: int = 10):
     probs = 1 / (1 + np.exp(-logits))
 
     results = []
+    dataset_dir = dataset.dataset_dir
     for i, (query, label) in enumerate(raws):
         results.append({
             "label": label,
             "prob": float(probs[i]),
-            "images": [Image.open(item.item_id).convert("RGB") for item in query.outfit]
+            "images": [Image.open(dataset_dir / 'images' / f'{item.item_id}.jpg').convert("RGB") for item in query.outfit]
         })
     return results
 
