@@ -222,4 +222,4 @@ with gr.Blocks(css=css) as demo:
         btn.click(fn=full_pipeline, outputs=html_output)
 
 if __name__ == "__main__":
-    demo.launch(server_port=6006)
+    demo.launch(server_port=6006,allowed_paths=[str(ROOT_DIR / 'datasets' / 'polyvore' / 'images')])
