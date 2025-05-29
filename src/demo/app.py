@@ -228,6 +228,5 @@ with gr.Blocks(css=css) as demo:
 if __name__ == "__main__":
     demo.launch(
         server_port=6006,
-        allowed_paths=[str(ROOT_DIR / 'datasets' / 'polyvore' / 'images')],
-        static_dirs=[str(ROOT_DIR / 'datasets' / 'polyvore' / 'images')]
+        allowed_paths=[str(ROOT_DIR / 'datasets' / 'polyvore' / 'images')]
     )
