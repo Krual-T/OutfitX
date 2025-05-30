@@ -251,7 +251,7 @@ with (gr.Blocks(css=css) as demo):
                     # data URI：前缀根据你的图类型（jpg/png）
                     html += (
                         f"<img src='data:image/jpeg;base64,{b64}' "
-                        "style='display:inline-block; margin-right:8px;width:20%; height:auto;' />"
+                        "style='display:inline-block; margin-right:8px;width:10%; height:auto;' />"
                     )
                 html += "</div></div>"
             return html
