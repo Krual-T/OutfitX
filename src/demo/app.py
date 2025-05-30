@@ -117,6 +117,7 @@ def load_task(task_name: str):
 
 
 # ---------- 推理函数 ----------
+@torch.no_grad()
 def run_cp_demo(model, dataset, processor, batch_size: int = 10):
     model.eval()
     samples_index = random.sample(range(len(dataset)), batch_size)
@@ -142,21 +143,6 @@ def run_cp_demo(model, dataset, processor, batch_size: int = 10):
             "paths": paths,   # 用 paths 字段
         })
     return results
-
-# ---------- 展示函数 ----------
-def display_cp_demo(results):
-    components = []
-    for item in results:
-        components.append(gr.Markdown(f"**标签：{item['label']}｜兼容性分数：{item['prob']:.3f}**"))
-
-        imgs = [
-            gr.Image(value=img, type="pil", show_label=False)
-            for img in item["images"]
-        ]
-        row = gr.Row(components=imgs)
-        components.append(row)
-
-    return components
 
 # ---------- CSS 样式 ----------
 css = """
@@ -216,6 +202,7 @@ def run_cir_demo(model, dataset, processor, batch_size: int = 10):
 
 
 # ─── FITB 分页渲染 ───────────────────────────
+@torch.no_grad()
 def run_fitb_demo(model, dataset, processor, batch_size: int = 10):
     model.eval()
     samples_index = random.sample(range(len(dataset)), batch_size)
