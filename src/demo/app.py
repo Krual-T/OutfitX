@@ -367,6 +367,7 @@ with (gr.Blocks(css=css) as demo):
                         "style='width:80px; height:auto; margin-right:8px; "
                         "border-radius:6px; box-shadow:0 0 4px rgba(0,0,0,0.2);'/>"
                     )
+                html += "</div></div>"
                 recs = [str(p) for p in item['candidate_items']]
                 html += (
                     "<div style='flex:1;'>"
