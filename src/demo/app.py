@@ -251,7 +251,7 @@ with (gr.Blocks(css=css) as demo):
                     # data URI：前缀根据你的图类型（jpg/png）
                     html += (
                         f"<img src='data:image/jpeg;base64,{b64}' "
-                        "style='display:inline-block; margin-right:8px;' />"
+                        "style='display:inline-block; margin-right:8px;width:20%; height:auto;' />"
                     )
                 html += "</div></div>"
             return html
@@ -290,7 +290,7 @@ with (gr.Blocks(css=css) as demo):
 
                 right += (
                     "<div style='margin-bottom:16px;'>"
-                    "<p><strong>Top-10 检索结果</strong></p><div style='display:flex; flex-wrap:wrap;'>"
+                    "<p style='font-size:24px;><strong>Top-10 检索结果</strong></p><div style='display:flex; flex-wrap:wrap;'>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 for idx, p in enumerate(recs):
