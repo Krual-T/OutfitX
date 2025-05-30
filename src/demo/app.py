@@ -290,7 +290,7 @@ with (gr.Blocks(css=css) as demo):
 
                 right += (
                     "<div style='margin-bottom:16px;'>"
-                    "<p style='font-size:24px;><strong>Top-10 检索结果</strong></p><div style='display:flex; flex-wrap:wrap;'>"
+                    "<p style='font-size:24px;><strong>Top-10 检索结果</strong></p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 for idx, p in enumerate(recs):
