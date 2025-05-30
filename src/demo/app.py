@@ -349,7 +349,7 @@ with (gr.Blocks(css=css) as demo):
         btn_cir = gr.Button("生成 FITB 示例 👗")
         fitb_html_output = gr.HTML()
         def fitb_pipeline():
-            results = run_cp_demo(*load_task("FITB"))
+            results = run_fitb_demo(*load_task("FITB"))
             html = ""
             for item in results:
                 # 整体一行两个区块
