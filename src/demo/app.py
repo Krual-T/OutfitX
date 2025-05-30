@@ -92,7 +92,7 @@ def load_task(task_name: str):
         dataset_cls = PolyvoreComplementaryItemRetrievalDataset
         task = OutfitComplementaryItemRetrievalTask
     elif task_name == "FITB":
-        ckpt = CKPT_ROOT/ "fill_in_the_blank"/f"{cfg_model.model_name}_best_Recall@1.pth"
+        ckpt = CKPT_ROOT/ "complementary_item_retrieval"/f"{cfg_model.model_name}_best_Recall@1.pth"
         dataset_cls = PolyvoreFillInTheBlankDataset
         task = OutfitFillInTheBlankTask
     else:
