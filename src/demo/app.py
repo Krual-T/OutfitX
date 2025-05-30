@@ -259,59 +259,64 @@ with (gr.Blocks(css=css) as demo):
 
     with gr.TabItem("服装互补单品检索（CIR）"):
         btn_cir = gr.Button("生成 CIR 示例 👗")
-        with gr.Row():
-            with gr.Column(scale=1):
-                html_left = gr.HTML()
-            with gr.Column(scale=1):
-                html_right = gr.HTML()
+        html_output = gr.HTML()
+
+
         def cir_pipeline():
             results = run_cir_demo(*load_task("CIR"))
-            left, right = "", ""
+            html = ""
             for item in results:
-                # —— left 部分
-                left += (
-                    "<div style='margin-bottom:16px;'>"
-                    "<p style='font-size:24px;'><strong>Query 部分服装</strong></p>"
+                # 整体一行两个区块
+                html += "<div style='display:flex; margin-bottom:24px;'>"
+
+                # —— 左侧：Query 部分服装
+                html += (
+                    "<div style='flex:1; padding-right:16px;'>"
+                    "<p style='font-size:20px; font-weight:bold;'>Query 部分服装</p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 for p in item["partial_outfit"]:
                     b64 = base64.b64encode(Path(p).read_bytes()).decode()
-                    left += (
+                    html += (
                         f"<img src='data:image/jpeg;base64,{b64}' "
-                        "style='display:inline-block; margin-right:8px;width:20%; height:auto;' />"
+                        "style='width:80px; height:auto; margin-right:8px; "
+                        "border-radius:6px; box-shadow:0 0 4px rgba(0,0,0,0.2);'/>"
                     )
-                left += "</div></div>"
+                html += "</div></div>"
 
-                # —— right 部分
+                # —— 右侧：Top-10 检索结果
                 gt = str(item["gt_item"])
                 recs = [str(p) for p in item["retrieval_items"]]
                 found = gt in recs
-                if not found: recs = [gt] + recs
+                if not found:
+                    recs = [gt] + recs
 
-                right += (
-                    "<div style='margin-bottom:16px;'>"
-                    "<p style='font-size:24px;'><strong>Top-10 检索结果</strong></p>"
+                html += (
+                    "<div style='flex:1;'>"
+                    "<p style='font-size:20px; font-weight:bold;'>Top-10 检索结果</p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 for idx, p in enumerate(recs):
                     b64 = base64.b64encode(Path(p).read_bytes()).decode()
-                    # 命中绿色，不命中红色，其它灰边
+                    # 样式区分
                     if p == gt and found:
                         bd = "4px solid limegreen"
                     elif p == gt and not found and idx == 0:
                         bd = "4px solid red"
                     else:
                         bd = "1px solid #ccc"
-                    right += (
+                    html += (
                         f"<img src='data:image/jpeg;base64,{b64}' "
-                        f"style='display:inline-block; margin-right:8px;width:20%; height:auto;border:{bd};border-radius:6px;'/>"
+                        f"style='width:80px; height:auto; margin-right:8px; "
+                        f"border:{bd}; border-radius:6px;'/>"
                     )
-                right += "</div></div>"
+                html += "</div></div>"
 
-            return left, right
-        btn_cir.click(fn=cir_pipeline, outputs=[html_left, html_right])
+                html += "</div>"  # 结束这一行
+            return html
 
 
+        btn_cir.click(fn=cir_pipeline, outputs=html_output)
 
 if __name__ == "__main__":
     demo.launch(
