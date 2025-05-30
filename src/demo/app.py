@@ -290,7 +290,7 @@ with (gr.Blocks(css=css) as demo):
 
                 right += (
                     "<div style='margin-bottom:16px;'>"
-                    "<p style='font-size:24px;><strong>Top-10 检索结果</strong></p>"
+                    "<p style='font-size:24px;'><strong>Top-10 检索结果</strong></p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 for idx, p in enumerate(recs):
@@ -304,8 +304,7 @@ with (gr.Blocks(css=css) as demo):
                         bd = "1px solid #ccc"
                     right += (
                         f"<img src='data:image/jpeg;base64,{b64}' "
-                        "style='display:inline-block; margin-right:8px;width:20%; height:auto;"
-                        f"border:{bd};border-radius:6px;'/>"
+                        f"style='display:inline-block; margin-right:8px;width:20%; height:auto;border:{bd};border-radius:6px;'/>"
                     )
                 right += "</div></div>"
 
