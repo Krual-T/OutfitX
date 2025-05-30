@@ -278,7 +278,7 @@ with (gr.Blocks(css=css) as demo):
                     b64 = base64.b64encode(Path(p).read_bytes()).decode()
                     left += (
                         f"<img src='data:image/jpeg;base64,{b64}' "
-                        "style='display:inline-block; margin-right:8px;' />"
+                        "style='display:inline-block; margin-right:8px;width:20%; height:auto;' />"
                     )
                 left += "</div></div>"
 
@@ -304,7 +304,7 @@ with (gr.Blocks(css=css) as demo):
                         bd = "1px solid #ccc"
                     right += (
                         f"<img src='data:image/jpeg;base64,{b64}' "
-                        "style='display:inline-block; margin-right:8px;"
+                        "style='display:inline-block; margin-right:8px;width:20%; height:auto;"
                         f"border:{bd};border-radius:6px;'/>"
                     )
                 right += "</div></div>"
