@@ -216,6 +216,33 @@ def run_cir_demo(model, dataset, processor, batch_size: int = 10):
 
 
 # ─── FITB 分页渲染 ───────────────────────────
+def run_fitb_demo(model, dataset, processor, batch_size: int = 10):
+    model.eval()
+    samples_index = random.sample(range(len(dataset)), batch_size)
+    raws = [dataset[i] for i in samples_index]
+    batch = processor(raws)
+    inp = {k: (v if k=='task' else v.to(DEVICE)) for k,v in batch['input_dict'].items()}
+    with torch.no_grad(), autocast(device_type=DEVICE.type, enabled=False):
+        y_hats_embedding = model(**inp).unsqueeze(1) # (B,1, D)
+        candidate_item_embeddings = batch['candidate_item_embedding'].to(DEVICE)  # [B,4,D]
+        dists = torch.cdist(y_hats_embedding, candidate_item_embeddings, p=2).squeeze(1)  # [B,1,4]->[B,4]
+    y_hats_index = torch.argmin(dists, dim=-1).cpu().numpy()  # [B]
+    y_index = batch['answer_index'].cpu().numpy()  # [B]
+    results = []
+    base_img_path = dataset.dataset_dir / 'images'
+    for i,index in enumerate(samples_index):
+        test_item = dataset.fitb_dataset[index]
+        candidate_item_ids = test_item['answers']
+        query_items_id = [base_img_path/ f'{item_id}.jpg' for item_id in test_item['question']]
+        y_id = base_img_path/ f'{candidate_item_ids[y_index[i]]}.jpg'
+        y_hat_id = base_img_path/ f'{candidate_item_ids[y_hats_index[i]]}.jpg'
+        results.append({
+            'partial_outfit': query_items_id, # [path]
+            'y_id': y_id, # path
+            'y_hat_id': y_hat_id, # path
+            'candidate_items': [base_img_path/ f'{item_id}.jpg' for item_id in candidate_item_ids]
+        })
+    return results
 
 css = """
 #scroll-row {
@@ -234,9 +261,9 @@ with (gr.Blocks(css=css) as demo):
     )
     with gr.TabItem("服装兼容性预测（CP）"):
         btn = gr.Button("生成 CP 示例 🚀")
-        html_output = gr.HTML()
+        cp_html_output = gr.HTML()
         def cp_pipeline():
-            results = run_cp_demo(*load_task("CP"), batch_size=CP_PAGE_SIZE)
+            results = run_cp_demo(*load_task("CP"))
             html = ""
             for item in results:
                 html += (
@@ -255,11 +282,11 @@ with (gr.Blocks(css=css) as demo):
                     )
                 html += "</div></div>"
             return html
-        btn.click(fn=cp_pipeline, outputs=html_output)
+        btn.click(fn=cp_pipeline, outputs=cp_html_output)
 
     with gr.TabItem("服装互补单品检索（CIR）"):
         btn_cir = gr.Button("生成 CIR 示例 👗")
-        html_output = gr.HTML()
+        cir_html_output = gr.HTML()
 
 
         def cir_pipeline():
@@ -316,7 +343,58 @@ with (gr.Blocks(css=css) as demo):
             return html
 
 
-        btn_cir.click(fn=cir_pipeline, outputs=html_output)
+        btn_cir.click(fn=cir_pipeline, outputs=cir_html_output)
+
+    with gr.TabItem("服装填空（FITB）"):
+        btn_cir = gr.Button("生成 FITB 示例 👗")
+        fitb_html_output = gr.HTML()
+        def fitb_pipeline():
+            results = run_cp_demo(*load_task("FITB"))
+            html = ""
+            for item in results:
+                # 整体一行两个区块
+                html += "<div style='display:flex; margin-bottom:24px;'>"
+                # —— 左侧：Query 部分服装
+                html += (
+                    "<div style='flex:1; padding-right:16px;'>"
+                    "<p style='font-size:20px; font-weight:bold;'>Query 部分服装</p>"
+                    "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
+                )
+                for p in item["partial_outfit"]:
+                    b64 = base64.b64encode(Path(p).read_bytes()).decode()
+                    html += (
+                        f"<img src='data:image/jpeg;base64,{b64}' "
+                        "style='width:80px; height:auto; margin-right:8px; "
+                        "border-radius:6px; box-shadow:0 0 4px rgba(0,0,0,0.2);'/>"
+                    )
+                recs = [str(p) for p in item['candidate_items']]
+                html += (
+                    "<div style='flex:1;'>"
+                    "<p style='font-size:20px; font-weight:bold;'>选项</p>"
+                    "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
+                )
+                for idx, p in enumerate(recs):
+                    b64 = base64.b64encode(Path(p).read_bytes()).decode()
+
+                    y_hat_id = str(item['y_hat_id'])
+                    y_id = str(item['y_id'])
+                    if p == y_id:
+                        bd = "4px solid limegreen"
+                    elif p == y_hat_id:
+                        bd = "4px solid red"
+                    else:
+                        bd = "1px solid #ccc"
+                    html += (
+                        f"<img src='data:image/jpeg;base64,{b64}' "
+                        f"style='width:80px; height:auto; margin-right:8px; "
+                        f"border:{bd}; border-radius:6px;'/>"
+                    )
+                html += "</div></div>"
+
+                html += "</div>"  # 结束这一行
+            return html
+        btn_cir.click(fn=fitb_pipeline, outputs=fitb_html_output)
+
 
 if __name__ == "__main__":
     demo.launch(
