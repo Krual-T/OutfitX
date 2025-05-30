@@ -255,6 +255,9 @@ css = """
 }
 """
 # ─── 在 Blocks 定义里，用一个 HTML 输出区域 ─────────────────
+cp_demo_input_seq = load_task("CP")
+cir_demo_input_seq = load_task("CIR")
+fitb_demo_input_seq = load_task("FITB")
 with (gr.Blocks(css=css) as demo):
     gr.Markdown(
         "<h1 style='text-align:center;'>🌟 基于CNN-Transformer跨模态融合的穿搭推荐模型研究可视化展板</h1>"
@@ -263,7 +266,7 @@ with (gr.Blocks(css=css) as demo):
         btn = gr.Button("生成 CP 示例 🚀")
         cp_html_output = gr.HTML()
         def cp_pipeline():
-            results = run_cp_demo(*load_task("CP"))
+            results = run_cp_demo(*cp_demo_input_seq)
             html = ""
             for item in results:
                 html += (
@@ -290,7 +293,7 @@ with (gr.Blocks(css=css) as demo):
 
 
         def cir_pipeline():
-            results = run_cir_demo(*load_task("CIR"))
+            results = run_cir_demo(*cir_demo_input_seq)
             html = ""
             for item in results:
                 # 整体一行两个区块
@@ -349,7 +352,7 @@ with (gr.Blocks(css=css) as demo):
         btn_cir = gr.Button("生成 FITB 示例 👗")
         fitb_html_output = gr.HTML()
         def fitb_pipeline():
-            results = run_fitb_demo(*load_task("FITB"))
+            results = run_fitb_demo(*fitb_demo_input_seq)
             html = ""
             for item in results:
                 # 整体一行两个区块
