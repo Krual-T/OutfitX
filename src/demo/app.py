@@ -268,7 +268,7 @@ with (gr.Blocks(css=css) as demo):
             for item in results:
                 html += (
                     "<div style='margin-bottom:16px;'>"
-                    f"<p style='font-size:24px;'><strong>标签：{item['label']} ｜ 兼容性分数：{item['prob']:.3f}</strong></p>"
+                    f"<p style='font-size:15px;'><strong>标签：{item['label']} ｜ 兼容性分数：{item['prob']:.3f}</strong></p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 # 👇 这里改为 Base64 内联
@@ -299,7 +299,7 @@ with (gr.Blocks(css=css) as demo):
                 # —— 左侧：Query 部分服装
                 html += (
                     "<div style='flex:1; padding-right:16px;'>"
-                    "<p style='font-size:20px; font-weight:bold;'>Query 部分服装</p>"
+                    "<p style='font-size:15px; font-weight:bold;'>Query 部分服装</p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 for p in item["partial_outfit"]:
@@ -320,7 +320,7 @@ with (gr.Blocks(css=css) as demo):
 
                 html += (
                     "<div style='flex:1;'>"
-                    "<p style='font-size:20px; font-weight:bold;'>Top-10 检索结果</p>"
+                    "<p style='font-size:15px; font-weight:bold;'>Top-10 检索结果</p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 for idx, p in enumerate(recs):
@@ -357,7 +357,7 @@ with (gr.Blocks(css=css) as demo):
                 # —— 左侧：Query 部分服装
                 html += (
                     "<div style='flex:1; padding-right:16px;'>"
-                    "<p style='font-size:20px; font-weight:bold;'>Query 部分服装</p>"
+                    "<p style='font-size:15px; font-weight:bold;'>Query 部分服装</p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 for p in item["partial_outfit"]:
@@ -371,7 +371,7 @@ with (gr.Blocks(css=css) as demo):
                 recs = [str(p) for p in item['candidate_items']]
                 html += (
                     "<div style='flex:1;'>"
-                    "<p style='font-size:20px; font-weight:bold;'>选项</p>"
+                    "<p style='font-size:15px; font-weight:bold;'>选项</p>"
                     "<div style='display:flex; overflow-x:auto; white-space:nowrap;'>"
                 )
                 for idx, p in enumerate(recs):
