@@ -7,8 +7,8 @@ from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.models import OutfitTransformer
-from src.models.configs import OutfitTransformerConfig
+from src.models import OutfitX
+from src.models.configs import OutfitXConfig
 from src.models.datatypes import OutfitPrecomputeEmbeddingTask
 from src.models.processor import OutfitTransformerProcessorFactory
 from src.trains.configs import PrecomputeEmbeddingConfig
@@ -26,7 +26,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
             )
         super().__init__(cfg=cfg, run_mode='custom')
         self.cfg = cfg
-        self.model_cfg = OutfitTransformerConfig()
+        self.model_cfg = OutfitXConfig()
         self.item_dataloader = None
         self.processor = OutfitTransformerProcessorFactory.get_processor(
             cfg=self.model_cfg,
@@ -71,7 +71,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         )
 
     def load_model(self) -> nn.Module:
-        return OutfitTransformer(cfg=self.model_cfg)
+        return OutfitX(cfg=self.model_cfg)
 
     def load_optimizer(self) -> torch.optim.Optimizer:
         pass

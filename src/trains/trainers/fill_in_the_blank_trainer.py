@@ -7,8 +7,8 @@ from torch import nn, autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.models import OutfitTransformer
-from src.models.configs import OutfitTransformerConfig
+from src.models import OutfitX
+from src.models.configs import OutfitXConfig
 from src.models.datatypes import OutfitFillInTheBlankTask
 from src.models.processor import OutfitTransformerProcessorFactory
 from src.trains.configs.fill_in_the_blank_train_config import FillInTheBlankTrainConfig
@@ -24,7 +24,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.cfg = cast(FillInTheBlankTrainConfig, cfg)
         self.device_type = None
-        self.model_cfg = OutfitTransformerConfig()
+        self.model_cfg = OutfitXConfig()
         self.model_cfg.model_name = 'all-MiniLM-L6-v2'
         if self.run_mode == 'train-valid':
             raise ValueError("为实现")
@@ -92,7 +92,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
     def hook_after_setup(self):
         self.device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = cast(
-            OutfitTransformer,
+            OutfitX,
             self.model
         )
         if self.world_size > 1 and self.run_mode == 'test':
@@ -108,7 +108,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
 
 
     def load_model(self) -> nn.Module:
-        return OutfitTransformer(cfg=self.model_cfg)
+        return OutfitX(cfg=self.model_cfg)
 
 
 

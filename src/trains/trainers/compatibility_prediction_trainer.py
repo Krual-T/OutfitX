@@ -13,8 +13,8 @@ from tqdm import tqdm
 from torch.utils.data.distributed import DistributedSampler
 from torch import distributed as dist
 from src.losses import FocalLoss
-from src.models import OutfitTransformer
-from src.models.configs import OutfitTransformerConfig
+from src.models import OutfitX
+from src.models.configs import OutfitXConfig
 from src.models.datatypes import OutfitCompatibilityPredictionTask
 from src.models.processor import OutfitTransformerProcessorFactory
 from src.trains.configs.compatibility_prediction_train_config import CompatibilityPredictionTrainConfig
@@ -31,7 +31,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
         self.cfg = cast(CompatibilityPredictionTrainConfig, cfg)
         self.loss:Union[FocalLoss,None] = None
         self.device_type = None
-        self.model_cfg = OutfitTransformerConfig()
+        self.model_cfg = OutfitXConfig()
         self.processor = OutfitTransformerProcessorFactory.get_processor(
             task=OutfitCompatibilityPredictionTask,
             cfg=self.model_cfg
@@ -324,7 +324,7 @@ class CompatibilityPredictionTrainer(DistributedTrainer):
             raise ValueError("测试模式下不支持分布式")
 
     def load_model(self) -> nn.Module:
-        return OutfitTransformer(cfg=self.model_cfg)
+        return OutfitX(cfg=self.model_cfg)
 
     def load_embeddings(self,embed_file_prefix:str="embedding_subset_") -> dict:
         """

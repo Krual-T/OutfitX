@@ -14,8 +14,8 @@ from PIL import Image
 import gradio as gr
 
 # ──── 来自项目的 imports ─────────────
-from src.models import OutfitTransformer
-from src.models.configs import OutfitTransformerConfig
+from src.models import OutfitX
+from src.models.configs import OutfitXConfig
 from src.models.datatypes import (
     OutfitCompatibilityPredictionTask,
     OutfitComplementaryItemRetrievalTask,
@@ -37,7 +37,7 @@ DEVICE    = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 cfg_cp    = CompatibilityPredictionTrainConfig()
 cfg_cir   = ComplementaryItemRetrievalTrainConfig()
 cfg_fitb  = FillInTheBlankTrainConfig()
-cfg_model = OutfitTransformerConfig()
+cfg_model = OutfitXConfig()
 
 # checkpoint 根目录（../checkpoints/{polyvore_type}/{task}/）
 CKPT_ROOT = Path(cfg_cp.checkpoint_dir).parent
@@ -82,7 +82,7 @@ def load_task(task_name: str):
     根据 'CP' / 'CIR' / 'FITB'，动态加载 model / dataset / processor
     """
 
-    model = OutfitTransformer(cfg_model)
+    model = OutfitX(cfg_model)
     if task_name == "CP":
         ckpt = CKPT_ROOT/ "compatibility_prediction"/f"{cfg_model.model_name}_best_AUC.pth"
         dataset_cls = PolyvoreCompatibilityPredictionDataset

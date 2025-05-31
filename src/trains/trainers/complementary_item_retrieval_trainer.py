@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.losses import SetWiseRankingLoss
-from src.models import OutfitTransformer
-from src.models.configs import OutfitTransformerConfig
+from src.models import OutfitX
+from src.models.configs import OutfitXConfig
 from src.models.datatypes import OutfitComplementaryItemRetrievalTask
 from src.models.processor import OutfitTransformerProcessorFactory
 from src.trains.datasets import PolyvoreItemDataset
@@ -27,7 +27,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         super().__init__(cfg=cfg, run_mode=run_mode)
         self.device_type = None
         self.best_metrics = {}
-        self.model_cfg = OutfitTransformerConfig()
+        self.model_cfg = OutfitXConfig()
         self.sample_mode = None
         if self.run_mode == 'train-valid':
             self.train_processor = OutfitTransformerProcessorFactory.get_processor(
@@ -344,7 +344,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
     def hook_after_setup(self):
         self.device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = cast(
-            OutfitTransformer,
+            OutfitX,
             self.model
         )
         if self.world_size > 1 and self.run_mode == 'test':
@@ -365,7 +365,7 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         )
 
     def load_model(self) -> nn.Module:
-        return OutfitTransformer(cfg=self.model_cfg)
+        return OutfitX(cfg=self.model_cfg)
 
     def load_optimizer(self) -> torch.optim.Optimizer:
         return torch.optim.AdamW(self.model.parameters(), lr=self.cfg.learning_rate)
