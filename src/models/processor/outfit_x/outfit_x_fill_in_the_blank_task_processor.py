@@ -1,10 +1,10 @@
 import torch
 
 from src.models.datatypes import OutfitComplementaryItemRetrievalTask
-from .outfit_transformer_base_processor import OutfitTransformerBaseProcessor
+from .outfit_x_base_processor import OutfitXBaseProcessor
 
 
-class OutfitTransformerFillInTheBlankTaskProcessor(OutfitTransformerBaseProcessor):
+class OutfitXFillInTheBlankTaskProcessor(OutfitXBaseProcessor):
 
     def __call__(self, batch):
         queries_iter, candidate_item_embeddings_iter, batch_y_iter = zip(*batch)

@@ -22,7 +22,7 @@ from src.models.datatypes import (
     OutfitFillInTheBlankTask,
 )
 from src.project_settings.info import PROJECT_DIR as ROOT_DIR
-from src.models.processor import OutfitTransformerProcessorFactory
+from src.models.processor import OutfitXProcessorFactory
 from src.trains.configs.compatibility_prediction_train_config import CompatibilityPredictionTrainConfig
 from src.trains.configs.complementary_item_retrieval_train_config import ComplementaryItemRetrievalTrainConfig
 from src.trains.configs.fill_in_the_blank_train_config import FillInTheBlankTrainConfig
@@ -110,7 +110,7 @@ def load_task(task_name: str):
         embedding_dict=emb_dict,
         load_image=False,  # image via item_id 载入
     )
-    processor = OutfitTransformerProcessorFactory.get_processor(
+    processor = OutfitXProcessorFactory.get_processor(
         task=task, cfg=cfg_model, run_mode='test'
     )
     return model.to(DEVICE), dataset, processor

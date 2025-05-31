@@ -1,1 +1,1 @@
-from src.models.processor.outfit_transformer import OutfitTransformerProcessorFactory
+from src.models.processor.outfit_x import OutfitXProcessorFactory

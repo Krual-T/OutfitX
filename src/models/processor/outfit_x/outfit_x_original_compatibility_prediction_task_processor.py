@@ -5,10 +5,10 @@ from torchvision.transforms import transforms
 from transformers import AutoTokenizer
 
 from src.utils.model_utils import flatten_seq_to_one_dim
-from .outfit_transformer_base_processor import OutfitTransformerBaseProcessor
+from .outfit_x_base_processor import OutfitXBaseProcessor
 from src.models.datatypes import OutfitCompatibilityPredictionTask
 
-class OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(OutfitTransformerBaseProcessor):
+class OutfitXOriginalCompatibilityPredictionTaskProcessor(OutfitXBaseProcessor):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.transform = transforms.Compose([

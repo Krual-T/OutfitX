@@ -1,9 +1,9 @@
 import torch
 
-from .outfit_transformer_base_processor import OutfitTransformerBaseProcessor
+from .outfit_x_base_processor import OutfitXBaseProcessor
 from src.models.datatypes import OutfitCompatibilityPredictionTask
 
-class OutfitTransformerCompatibilityPredictionTaskProcessor(OutfitTransformerBaseProcessor):
+class OutfitXCompatibilityPredictionTaskProcessor(OutfitXBaseProcessor):
     def __call__(self, batch):
         queries_iter, labels_iter = zip(*batch)
         sequences = [[item.embedding for item in query.outfit] for query in queries_iter]

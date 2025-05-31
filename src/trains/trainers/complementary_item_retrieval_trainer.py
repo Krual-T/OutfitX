@@ -13,7 +13,7 @@ from src.losses import SetWiseRankingLoss
 from src.models import OutfitX
 from src.models.configs import OutfitXConfig
 from src.models.datatypes import OutfitComplementaryItemRetrievalTask
-from src.models.processor import OutfitTransformerProcessorFactory
+from src.models.processor import OutfitXProcessorFactory
 from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_complementary_item_retrieval_dataset import \
     PolyvoreComplementaryItemRetrievalDataset
@@ -30,16 +30,16 @@ class ComplementaryItemRetrievalTrainer(DistributedTrainer):
         self.model_cfg = OutfitXConfig()
         self.sample_mode = None
         if self.run_mode == 'train-valid':
-            self.train_processor = OutfitTransformerProcessorFactory.get_processor(
+            self.train_processor = OutfitXProcessorFactory.get_processor(
                 run_mode='train',
                 task=OutfitComplementaryItemRetrievalTask,
             )
-            self.valid_processor = OutfitTransformerProcessorFactory.get_processor(
+            self.valid_processor = OutfitXProcessorFactory.get_processor(
                 run_mode='valid',
                 task=OutfitComplementaryItemRetrievalTask,
             )
         elif self.run_mode == 'test':
-            self.test_processor = OutfitTransformerProcessorFactory.get_processor(
+            self.test_processor = OutfitXProcessorFactory.get_processor(
                 run_mode='test',
                 task=OutfitComplementaryItemRetrievalTask,
             )
