@@ -6,7 +6,7 @@ from .transformer_config import TransformerConfig
 
 
 @dataclass
-class OutfitTransformerConfig:
+class OutfitXConfig:
     # 定义填充策略，可选值为 'longest' 或 'max_length' ，默认为 'longest'
     padding: Literal['longest', 'max_length'] ='max_length'# 'longest'
     # 定义最大长度，默认为16

@@ -3,7 +3,7 @@ import torch
 
 from PIL import Image
 from torch import nn
-from .configs import OutfitTransformerConfig
+from .configs import OutfitXConfig
 from .encoders import ItemEncoder
 from .datatypes import (
     OutfitComplementaryItemRetrievalTask,
@@ -14,7 +14,7 @@ from .datatypes import (
 from typing import List, Union, Optional, Type, TypeVar
 
 
-class OutfitTransformer(nn.Module):
+class OutfitX(nn.Module):
     Tasks = TypeVar(
         'Tasks',
         OutfitComplementaryItemRetrievalTask,
@@ -22,9 +22,9 @@ class OutfitTransformer(nn.Module):
         OutfitFillInTheBlankTask,
         OutfitPrecomputeEmbeddingTask,
     )
-    def __init__(self, cfg: Optional[OutfitTransformerConfig]= None):
+    def __init__(self, cfg: Optional[OutfitXConfig]= None):
         super().__init__()
-        self.cfg = cfg if cfg is not None else OutfitTransformerConfig()
+        self.cfg = cfg if cfg is not None else OutfitXConfig()
         # 1 编码器设置
         ## 1.1 服装单品编码器
         self.item_encoder = ItemEncoder(self.cfg.item_encoder)
@@ -177,16 +177,16 @@ class OutfitTransformer(nn.Module):
 #
 # from PIL import Image
 # from torch import nn
-# from .configs import OutfitTransformerConfig
+# from .configs import OutfitXConfig
 # from .encoders import ItemEncoder
 # from .datatypes import FashionItem,OutfitComplementaryItemRetrievalTask,OutfitCompatibilityPredictionTask
 # from typing import List, Union, Optional
 #
 #
-# class OutfitTransformer(nn.Module):
-#     def __init__(self, cfg: Optional[OutfitTransformerConfig]= None):
+# class OutfitX(nn.Module):
+#     def __init__(self, cfg: Optional[OutfitXConfig]= None):
 #         super().__init__()
-#         self.cfg = cfg if cfg is not None else OutfitTransformerConfig()
+#         self.cfg = cfg if cfg is not None else OutfitXConfig()
 #         # 1 编码器设置
 #         ## 1.1 服装单品编码器
 #         self.item_encoder = ItemEncoder(self.cfg.item_encoder)

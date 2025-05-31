@@ -1,1 +1,1 @@
-from .outfit_transformer import OutfitTransformer
+from .outfit_transformer import OutfitX

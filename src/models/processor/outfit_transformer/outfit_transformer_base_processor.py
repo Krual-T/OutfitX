@@ -6,12 +6,12 @@ from PIL import Image
 from torch import nn
 from torchvision.transforms.v2.functional import pad_video
 
-from src.models.configs import OutfitTransformerConfig
+from src.models.configs import OutfitXConfig
 from src.models.datatypes import FashionItem
 
 # 作为collate使用
 class OutfitTransformerBaseProcessor:
-    def __init__(self, cfg:OutfitTransformerConfig):
+    def __init__(self, cfg:OutfitXConfig):
         self.cfg = cfg
         self.image_pad = Image.new("RGB", (224, 224))
         self.text_pad = ''

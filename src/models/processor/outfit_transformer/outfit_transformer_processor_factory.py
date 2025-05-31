@@ -1,8 +1,8 @@
 from typing import Type, Optional, Literal
 from unittest import TestCase
 
-from src.models import OutfitTransformer
-from src.models.configs import OutfitTransformerConfig
+from src.models import OutfitX
+from src.models.configs import OutfitXConfig
 from .outfit_transformer_fill_in_the_blank_task_processor import OutfitTransformerFillInTheBlankTaskProcessor
 from .outfit_transformer_compatibility_prediction_task_processor import OutfitTransformerCompatibilityPredictionTaskProcessor
 from .outfit_transformer_complementary_item_retrieval_processor import OutfitTransformerComplementaryItemRetrievalTaskProcessor
@@ -14,12 +14,12 @@ from src.models.datatypes import (
     OutfitFillInTheBlankTask
 )
 class OutfitTransformerProcessorFactory:
-    Tasks = OutfitTransformer.Tasks
+    Tasks = OutfitX.Tasks
     @staticmethod
-    def get_processor(task:Type[Tasks],cfg: Optional[OutfitTransformerConfig]= None, run_mode:Optional[Literal['train', 'valid', 'test']] = None, *args, **kwargs):
+    def get_processor(task:Type[Tasks], cfg: Optional[OutfitXConfig]= None, run_mode:Optional[Literal['train', 'valid', 'test']] = None, *args, **kwargs):
 
         if cfg is None:
-            cfg = OutfitTransformerConfig()
+            cfg = OutfitXConfig()
 
         if task is OutfitCompatibilityPredictionTask:
             return OutfitTransformerCompatibilityPredictionTaskProcessor(cfg=cfg)
