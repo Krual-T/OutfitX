@@ -1,10 +1,10 @@
 from typing import List
 
-from .outfit_transformer_base_processor import OutfitTransformerBaseProcessor
+from .outfit_x_base_processor import OutfitXBaseProcessor
 from src.models.datatypes import FashionItem, OutfitPrecomputeEmbeddingTask
 
 
-class OutfitTransformerPrecomputeEmbeddingTaskProcessor(OutfitTransformerBaseProcessor):
+class OutfitXPrecomputeEmbeddingTaskProcessor(OutfitXBaseProcessor):
     def __call__(self, batch:List[OutfitPrecomputeEmbeddingTask]):
         batch_dict = {
             'input_dict': {

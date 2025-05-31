@@ -1,10 +1,10 @@
 import torch
 from typing import Literal
-from .outfit_transformer_base_processor import OutfitTransformerBaseProcessor
+from .outfit_x_base_processor import OutfitXBaseProcessor
 from src.models.datatypes import OutfitComplementaryItemRetrievalTask
 
 
-class OutfitTransformerComplementaryItemRetrievalTaskProcessor(OutfitTransformerBaseProcessor):
+class OutfitXComplementaryItemRetrievalTaskProcessor(OutfitXBaseProcessor):
     def __init__(self, run_mode:Literal['train', 'valid', 'test'],*args, **kwargs):
         super().__init__(*args, **kwargs)
         if run_mode == 'train':

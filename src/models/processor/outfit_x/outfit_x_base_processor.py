@@ -10,7 +10,7 @@ from src.models.configs import OutfitXConfig
 from src.models.datatypes import FashionItem
 
 # 作为collate使用
-class OutfitTransformerBaseProcessor:
+class OutfitXBaseProcessor:
     def __init__(self, cfg:OutfitXConfig):
         self.cfg = cfg
         self.image_pad = Image.new("RGB", (224, 224))

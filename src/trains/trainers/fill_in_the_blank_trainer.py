@@ -10,7 +10,7 @@ from tqdm import tqdm
 from src.models import OutfitX
 from src.models.configs import OutfitXConfig
 from src.models.datatypes import OutfitFillInTheBlankTask
-from src.models.processor import OutfitTransformerProcessorFactory
+from src.models.processor import OutfitXProcessorFactory
 from src.trains.configs.fill_in_the_blank_train_config import FillInTheBlankTrainConfig
 from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_fill_in_the_blank_dataset import PolyvoreFillInTheBlankDataset
@@ -29,7 +29,7 @@ class FillInTheBlankTrainer(DistributedTrainer):
         if self.run_mode == 'train-valid':
             raise ValueError("为实现")
         elif self.run_mode == 'test':
-            self.test_processor = OutfitTransformerProcessorFactory.get_processor(
+            self.test_processor = OutfitXProcessorFactory.get_processor(
                 task=OutfitFillInTheBlankTask,
                 cfg=self.model_cfg,
             )

@@ -10,7 +10,7 @@ from tqdm import tqdm
 from src.models import OutfitX
 from src.models.configs import OutfitXConfig
 from src.models.datatypes import OutfitPrecomputeEmbeddingTask
-from src.models.processor import OutfitTransformerProcessorFactory
+from src.models.processor import OutfitXProcessorFactory
 from src.trains.configs import PrecomputeEmbeddingConfig
 from src.trains.trainers.distributed_trainer import DistributedTrainer
 from src.trains.datasets import PolyvoreItemDataset
@@ -28,7 +28,7 @@ class PrecomputeEmbeddingScript(DistributedTrainer):
         self.cfg = cfg
         self.model_cfg = OutfitXConfig()
         self.item_dataloader = None
-        self.processor = OutfitTransformerProcessorFactory.get_processor(
+        self.processor = OutfitXProcessorFactory.get_processor(
             cfg=self.model_cfg,
             task=OutfitPrecomputeEmbeddingTask
         )

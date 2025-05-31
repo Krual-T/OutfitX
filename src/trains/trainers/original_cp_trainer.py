@@ -14,8 +14,8 @@ from torch import distributed as dist
 from src.losses import FocalLoss
 from src.models import OutfitX
 from src.models.configs import OutfitXConfig
-from src.models.processor.outfit_transformer.outfit_transformer_original_compatibility_prediction_task_processor import \
-    OutfitTransformerOriginalCompatibilityPredictionTaskProcessor
+from src.models.processor.outfit_x.outfit_x_original_compatibility_prediction_task_processor import \
+    OutfitXOriginalCompatibilityPredictionTaskProcessor
 from src.trains.configs.compatibility_prediction_train_config import CompatibilityPredictionTrainConfig
 from src.trains.datasets import PolyvoreItemDataset
 from src.trains.datasets.polyvore.polyvore_compatibility_dataset import PolyvoreCompatibilityPredictionDataset
@@ -37,7 +37,7 @@ class OriginalCompatibilityPredictionTrainer(DistributedTrainer):
         self.device_type = None
         self.model_cfg = OutfitXConfig()
         self.model_cfg.item_encoder.type = 'resnet_hf_sentence_bert'
-        self.processor = OutfitTransformerOriginalCompatibilityPredictionTaskProcessor(self.model_cfg)
+        self.processor = OutfitXOriginalCompatibilityPredictionTaskProcessor(self.model_cfg)
         self.best_metrics = {
             'AUC': 0.0,
             'Precision': 0.0,
