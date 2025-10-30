@@ -1,7 +1,5 @@
-# GraduationDesign
-
 # OutfitX: Fashion Outfit Recommendation System
-
+This is my undergraduate graduation project; I'm keeping it as a memento.
 A cross-modal fusion model for fashion outfit recommendation, leveraging CNN and Transformer architectures to handle both image and text data for tasks like compatibility prediction, complementary item retrieval, and fill-in-the-blank challenges. This work, named **OutfitX**, draws inspiration from the foundational research presented in *[OutfitTransformer: Learning Outfit Representations for Fashion Recommendation](https://arxiv.org/abs/2204.04812v2)* and references the open-source reproduction implementation from [outfit-transformer](https://github.com/owj0421/outfit-transformer), which enhances performance and usability for real-world deployment.
 
 ## Key Features
